@@ -1,0 +1,5 @@
+code_path: /tigress/hejiaz/multi_srm/code/
+input_path: /tigress/hejiaz/data/input/
+working_path: /scratch/gpfs/hejiaz/working/multi_srm/
+output_path: /tigress/hejiaz/multi_srm/output/
+raw_path: /tigress/hejiaz/data/raw/
