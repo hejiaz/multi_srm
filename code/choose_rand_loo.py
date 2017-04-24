@@ -14,7 +14,7 @@ import random
 min_test = 3
 num_train = 40
 ds = [0,1,2,3] # which datasets to use: greeneye,milky,vodka,sherlock
-max_rand = 20
+max_rand = 30
 
 # load membership info
 setting = open('setting.yaml')

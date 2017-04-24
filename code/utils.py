@@ -28,6 +28,39 @@ def zscore_data_all(data):
         zscored[:,:,m] = zscore_data(data[:,:,m])
     return zscored
 
+# find shared subjects between training datasets and left-out dataset. If not shared subject,
+# raise an exception
+# arguments:
+# membership: 2d array (total # subject x total # datasets), the full membership array of 
+# all datasets
+# loo_ds: indices of left-out dataset
+# return:
+# idx_loo: a list, (dataset-specific) index of shared subjects in dataset loo_ds
+# idx_train: a list, (global in training datasets) index of shared subjects in combined training datasets
+def find_shared_subjects_loo_ds(membership,loo_ds):
+    nsubjs,ndata = membership.shape
+    train_ds = list(range(ndata))
+    train_ds.remove(loo_ds)
+    train_list = []
+    shared_subj_list = []
+    idx_loo = []
+    idx_train = []
+    for m in range(nsubjs):
+        # if this subject is valid in training datasets
+        train_subj = list(np.squeeze(membership[m,train_ds]))
+        if not all(n==-1 for n in train_subj):
+            train_list.append(train_subj)
+            # if this subject is also in loo_ds
+            if membership[m,loo_ds] != -1:
+                shared_subj_list.append(train_subj)
+                idx_loo.append(membership[m,loo_ds])
+    if not idx_loo:
+        raise Exception('no shared subjects between training datasets and left-out dataset')
+    for m in range(len(idx_loo)):
+        idx_train.append(train_list.index(shared_subj_list[m]))
+    return idx_loo,idx_train
+
+
 # find shared subjects between two datasets. If no shared subject, raise an exception
 # arguments:
 # membership: 2d array (total # subject x total # datasets), the full membership array of 
@@ -322,7 +355,22 @@ def learn_W(data,S,W,train_mb,test_mb,idx,model):
         raise Exception('model name not valid')
     return W_all,loo
 
-
+# learn W of all subjects in the left-out dataset
+# arguments:
+# data: a 3d array (voxel x time x # subjects in loo_ds)
+# S: a 2d array (nfeature x time)
+# return:
+# W: a 3d array (voxel x nfeature x # subjects in loo_ds)
+def learn_W_loo_ds(data,S):
+    voxel, _,nsubjs = data.shape
+    nfeature = S.shape[0]
+    W = np.zeros((voxel,nfeature,nsubjs),dtype=np.float32)
+    for m in range(nsubjs):
+        Am = fast_dot(data[:,:,m],S.T)
+        pert = np.eye(voxel,M=nfeature,dtype=np.float32)
+        Um, _, Vm = np.linalg.svd(Am+0.0001*pert, full_matrices=False)
+        W[:,:,m] = fast_dot(Um,Vm)  # W = UV^T     
+    return W
 # transform prediction data of subjects (both training and testing) in a single dataset (idx)
 # arguments:
 # data: a 3d array (voxel x time x # subjects[idx]), prediction data from dataset idx
