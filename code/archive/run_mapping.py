@@ -25,12 +25,10 @@ import random
 
 def run_mapping_expt(nfeature,initseed,expopt,word_dim,num_train,loo_flag,model,roi,ds):
 	# parameters
-	expt = 'mapping'
-	# expt = 'mapping_avg'
+	expt = 'mapping_avg'
 	niter = 50
-	num_previous = 8
-	# num_chunks = 25
-	num_chunks = [15,10,10,50] # different number of scenes for different datasets, make sure the scene length is not too short
+	num_previous = 10
+	num_chunks = 25
 	pre = ''
 
 	print (model)
@@ -134,20 +132,20 @@ def run_mapping_expt(nfeature,initseed,expopt,word_dim,num_train,loo_flag,model,
 		# S is the transformed alignment data from training subjects
 		W,S = align.align(data_align,train_mb,niter,nfeature,initseed)
 		# learn W_all, loo, and transform prediction data into shared space
-		# W_all = []
+		W_all = []
 		transformed_pred = []
 		loo = []
 		for d in range(ndata):
 			W_tmp,loo_tmp = ut.learn_W(data_align,S,W,train_mb,test_mb,d,model)
 			transformed_pred.append(ut.transform(data_pred[d],W_tmp))
-			# W_all.append(W_tmp)
+			W_all.append(W_tmp)
 			loo.append(loo_tmp)
 		# # save W
 		# if not os.path.exists(options['output_path']+'W/'+pre+'mapping{}/'.format(word_dim)+model+'/'):
 		# 	os.makedirs(options['output_path']+'W/'+pre+'mapping{}/'.format(word_dim)+model+'/')
 		# with open(options['output_path']+'W/'+pre+'mapping{}/'+model+'/'+'{}_feat{}_ntrain{}_rand{}_{}_ds{}.pickle'.format(word_dim,roi,nfeature,num_train,initseed,expopt,ds),'wb') as fid:
 		# 	pickle.dump(W_all,fid,pickle.HIGHEST_PROTOCOL)
-		# del W_all
+		del W_all
 	else:
 		# average alignment data of training subjects as transformed alignment data
 		S = []
@@ -172,24 +170,12 @@ def run_mapping_expt(nfeature,initseed,expopt,word_dim,num_train,loo_flag,model,
 	else:
 		accu_class,accu_rank = pred.predict(transformed_pred,word_pred_all,W_ft,num_chunks,num_previous)
 
-	accu_class_mean = [np.mean(a) for a in accu_class]
-	accu_rank_mean = [np.mean(a) for a in accu_rank]
 	print ('results:')
-	print ('accu_class: '+str(accu_class_mean))
-	print ('accu_rank: '+str(accu_rank_mean))
+	print ('accu_class: '+str(accu_class))
+	print ('accu_rank: '+str(accu_rank))
+
 	# save results
 	if not os.path.exists(options['output_path']+'accu/'+pre+'mapping{}/'.format(word_dim)+model+'/'):
 		os.makedirs(options['output_path']+'accu/'+pre+'mapping{}/'.format(word_dim)+model+'/')
-	with open(options['output_path']+'accu/'+pre+'mapping{}/'.format(word_dim)+model+'/'+'{}_chunks{}_feat{}_ntrain{}_rand{}_{}_ds{}_class.pickle'.format(roi,num_chunks,nfeature,num_train,initseed,expopt,ds),'wb') as fid:
-		pickle.dump(accu_class,fid,pickle.HIGHEST_PROTOCOL)
-	with open(options['output_path']+'accu/'+pre+'mapping{}/'.format(word_dim)+model+'/'+'{}_chunks{}_feat{}_ntrain{}_rand{}_{}_ds{}_rank.pickle'.format(roi,num_chunks,nfeature,num_train,initseed,expopt,ds),'wb') as fid:
-		pickle.dump(accu_rank,fid,pickle.HIGHEST_PROTOCOL)
-
-	# print ('results:')
-	# print ('accu_class: '+str(accu_class))
-	# print ('accu_rank: '+str(accu_rank))
-	# # save results
-	# if not os.path.exists(options['output_path']+'accu/'+pre+'mapping{}/'.format(word_dim)+model+'/'):
-	# 	os.makedirs(options['output_path']+'accu/'+pre+'mapping{}/'.format(word_dim)+model+'/')
-	# np.savez_compressed(options['output_path']+'accu/'+pre+'mapping{}/'.format(word_dim)+model+'/'+'{}_chunks{}_feat{}_ntrain{}_rand{}_{}_ds{}.npz'.format(roi,num_chunks,nfeature,num_train,initseed,expopt,ds),accu_class=accu_class,accu_rank=accu_rank)
+	np.savez_compressed(options['output_path']+'accu/'+pre+'mapping{}/'.format(word_dim)+model+'/'+'{}_chunks{}_feat{}_ntrain{}_rand{}_{}_ds{}.npz'.format(roi,num_chunks,nfeature,num_train,initseed,expopt,ds),accu_class=accu_class,accu_rank=accu_rank)
 

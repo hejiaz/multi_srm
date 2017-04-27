@@ -345,9 +345,9 @@ def learn_W_indv_srm(data,S,W,train_mb,test_mb,idx):
 # model: 'multi_srm','srm_rotate','srm_rotate_ind','indv_srm'
 # see comments of sub-functions for arguments information
 def learn_W(data,S,W,train_mb,test_mb,idx,model):
-    if model in ['multi_srm','srm_rotate']:
+    if model in ['multi_srm','multi_prob']:
         W_all,loo = learn_W_jointly(data,S,W,train_mb,test_mb,idx,'all')
-    elif model in ['srm_rotate_ind']:
+    elif model in ['srm_rotate']:
         W_all,loo = learn_W_jointly(data,S,W,train_mb,test_mb,idx,'ind')
     elif model in ['indv_srm']:
         W_all,loo = learn_W_indv_srm(data,S,W,train_mb,test_mb,idx)

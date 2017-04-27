@@ -11,8 +11,8 @@ from numpy.linalg import norm
 
 # final dimension
 ndim = 100
-wiki = False
-pre = 'ww_'
+wiki = True
+pre = ''
 
 # load path
 setting = open('../setting.yaml')
@@ -92,10 +92,30 @@ else:
 		ds_vecs[tmp[0]] = embedding
 	del vecs
 
-print ('converting')
+# project embeddings to ndim
+map_back = []
+all_vecs = np.empty((vectors_dim,0),dtype=np.float32)
+for word in ds_vecs.items():
+	all_vecs = np.concatenate((all_vecs,word[1].reshape(vectors_dim,1)),axis=1)
+	map_back.append(word[0])
+# projection
+eps = 0.01
+orig_dists = pairwise_distances(all_vecs.T, metric='cosine')
+num_dists = float(len(np.ravel(orig_dists)))
+l1_err_in_cosdist = 1
+while(l1_err_in_cosdist > 0.07): # empirically found to be close to the lower bound
+	transformer100 = GaussianRandomProjection(n_components=ndim, eps=eps)
+	D_100 = transformer100.fit_transform(all_vecs.T)
+	D_100 = D_100.T
+	# calculate new dists
+	dists_100dim = pairwise_distances(D_100.T, metric='cosine')
+	l1_err_in_cosdist = norm(np.ravel(orig_dists) - np.ravel(dists_100dim), 1)/num_dists
+# map back
+for i in range(len(map_back)):
+	ds_vecs[map_back[i]] = D_100[:,i]
+
 # for each dataset, use wiki embedding and yingyu coefficient to convert
 alpha = 0.0001
-all_vecs = []
 for ds in dataset:
 	with open(antn_file.format(ds)) as fid:
 		ds_words = fid.readlines()
@@ -103,46 +123,14 @@ for ds in dataset:
 	num_words_in_TR = []
 	for i in range(len(ds_words)):
 		num_words_in_TR.append(len(ds_words[i]))
-	text = np.zeros((vectors_dim,len(ds_words)),dtype=np.float32)
+	text = np.zeros((ndim,len(ds_words)),dtype=np.float32)
 	for i in range(len(ds_words)):
 		for j in range(len(ds_words[i])):
 			word = ds_words[i][j]
 			factor = alpha/(ds_freq[word] + alpha)
 			text[:,i] += ds_vecs[word]*factor/num_words_in_TR[i]
-	all_vecs.append(text)
-
-
-if vectors_dim <= ndim:
-	for d, ds in enumerate(dataset):
-		if ds != 'sherlock':
-			np.savez_compressed(out_file.format(ds),text=all_vecs[d])
-		else:
-			np.savez_compressed(out_file.format(ds),text=all_vecs[d][:,:-3])	
-else:
-	print ('start projection')
-	# projection
-	eps = 0.01
-	orig_dists = []
-	num_dists = []
-	for d in range(len(dataset)):
-		orig_dists.append(pairwise_distances(all_vecs[d].T, metric='cosine'))
-		num_dists.append(float(len(np.ravel(orig_dists[d]))))
-	l1_err_in_cosdist = 1
-	while(l1_err_in_cosdist > 0.23): # empirically found to be close to the lower bound
-		transformer_ndim = GaussianRandomProjection(n_components=ndim, eps=eps)
-		D_ndim = []
-		dists_ndim = []
-		l1_err_in_cosdist = 0.
-		for d in range(len(dataset)):
-			D_ndim.append(transformer_ndim.fit_transform(all_vecs[d].T))
-			D_ndim[d] = D_ndim[d].T
-			# calculate new dists
-			dists_ndim.append(pairwise_distances(D_ndim[d].T, metric='cosine'))
-			l1_err_in_cosdist += norm(np.ravel(orig_dists[d]) - np.ravel(dists_ndim[d]), 1)/num_dists[d]
-
-	for d, ds in enumerate(dataset):
-		if ds != 'sherlock':
-			np.savez_compressed(out_file.format(ds),text=D_ndim[d])
-		else:
-			np.savez_compressed(out_file.format(ds),text=D_ndim[d][:,:-3])	
+	if ds != 'sherlock':
+		np.savez_compressed(out_file.format(ds),text=text)
+	else:
+		np.savez_compressed(out_file.format(ds),text=text[:,:-3])	
 

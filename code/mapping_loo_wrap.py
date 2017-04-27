@@ -5,8 +5,8 @@
 from run_mapping_loo import run_mapping_loo_expt
 
 # mapping experiments
-nfeature = 25
-word_dim = 100
+nfeature = 50
+word_dim = 300
 for initseed in range(5):
 	for loo_ds in [1,2,3]:
 		for model in ['multi_srm','srm_rotate','srm_rotate_ind','avg']:

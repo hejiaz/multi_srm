@@ -23,13 +23,11 @@ import random
 
 def run_mapping_loo_expt(nfeature,initseed,word_dim,model,roi,loo_ds):
 	# parameters
-	expt = 'mapping'
-	# expt = 'mapping_avg'
+	expt = 'mapping_avg'
 	train_ds = [0,1,2,3]
 	niter = 50
-	num_previous = 8
-	num_chunks = [15,10,10,50] # different number of scenes for different datasets, make sure the scene length is not too short
-	# num_chunks = 25
+	num_previous = 10
+	num_chunks = 25
 	pre = ''
 
 	print (model)
@@ -122,29 +120,14 @@ def run_mapping_loo_expt(nfeature,initseed,word_dim,model,roi,loo_ds):
 		transformed_pred = data_pred	
 
 	print ('run experiment')
-	accu_class,accu_rank = pred.predict([transformed_pred],[word_pred_all],W_ft,[num_chunks[loo_ds]],num_previous)
+	accu_class,accu_rank = pred.predict([transformed_pred],word_pred_all,W_ft,num_chunks,num_previous)
 
-	accu_class_mean = [np.mean(a) for a in accu_class]
-	accu_rank_mean = [np.mean(a) for a in accu_rank]
 	print ('results:')
-	print ('accu_class: '+str(accu_class_mean))
-	print ('accu_rank: '+str(accu_rank_mean))
+	print ('accu_class: '+str(accu_class))
+	print ('accu_rank: '+str(accu_rank))
+
 	# save results
 	if not os.path.exists(options['output_path']+'accu/'+pre+'mapping{}_loo/'.format(word_dim)+model+'/'):
 		os.makedirs(options['output_path']+'accu/'+pre+'mapping{}_loo/'.format(word_dim)+model+'/')
-	with open(options['output_path']+'accu/'+pre+'mapping{}_loo/'.format(word_dim)+model+'/'+'{}_chunks{}_feat{}_rand{}_loods{}_class.pickle'.format(roi,num_chunks[loo_ds],nfeature,initseed,loo_ds),'wb') as fid:
-		pickle.dump(accu_class,fid,pickle.HIGHEST_PROTOCOL)
-	with open(options['output_path']+'accu/'+pre+'mapping{}_loo/'.format(word_dim)+model+'/'+'{}_chunks{}_feat{}_rand{}_loods{}_rank.pickle'.format(roi,num_chunks[loo_ds],nfeature,initseed,loo_ds),'wb') as fid:
-		pickle.dump(accu_rank,fid,pickle.HIGHEST_PROTOCOL)
-
-
-	# print ('results:')
-	# print ('accu_class: '+str(accu_class))
-	# print ('accu_rank: '+str(accu_rank))
-	# # save results
-	# if not os.path.exists(options['output_path']+'accu/'+pre+'mapping{}_loo/'.format(word_dim)+model+'/'):
-	# 	os.makedirs(options['output_path']+'accu/'+pre+'mapping{}_loo/'.format(word_dim)+model+'/')
-	# np.savez_compressed(options['output_path']+'accu/'+pre+'mapping{}_loo/'.format(word_dim)+model+'/'+'{}_chunks{}_feat{}_rand{}_loods{}.npz'.format(roi,num_chunks,nfeature,initseed,loo_ds),accu_class=accu_class,accu_rank=accu_rank)
-
-
+	np.savez_compressed(options['output_path']+'accu/'+pre+'mapping{}_loo/'.format(word_dim)+model+'/'+'{}_chunks{}_feat{}_rand{}_loods{}.npz'.format(roi,num_chunks,nfeature,initseed,loo_ds),accu_class=accu_class,accu_rank=accu_rank)
 
