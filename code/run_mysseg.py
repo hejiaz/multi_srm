@@ -31,9 +31,15 @@ def run_mysseg_expt(nfeature,initseed,expopt,num_train,loo_flag,model,roi,ds):
 	print (roi)
 
 	# import alignment and experiment method
-	if model in ['srm_rotate_ind']:
-		align = importlib.import_module('model.srm_rotate')
-	elif model in ['multi_srm','srm_rotate','indv_srm','multi_prob','multi_prob_basic']:
+	if model in ['all_srm','indv_srm']:
+		align = importlib.import_module('model.srm')
+	elif model in ['all_ica','indv_ica']:
+		align = importlib.import_module('model.ica')
+	elif model in ['all_gica','indv_gica']:
+		align = importlib.import_module('model.gica')
+	elif model in ['all_dict','indv_dict']:
+		align = importlib.import_module('model.dictlearn')		
+	elif model in ['multi_srm']:
 		align = importlib.import_module('model.'+model)
 	elif model in ['avg']:
 		align = None
@@ -113,9 +119,9 @@ def run_mysseg_expt(nfeature,initseed,expopt,num_train,loo_flag,model,roi,ds):
 		# alignment
 		# S is the transformed alignment data from training subjects
 		if model not in ['multi_prob']:
-			W,S = align.align(data_align,train_mb,niter,nfeature,initseed)
+			W,S = align.align(data_align,train_mb,niter,nfeature,initseed,model)
 		else:
-			W,S,noise = align.align(data_align,train_mb,niter,nfeature,initseed)
+			W,S,noise = align.align(data_align,train_mb,niter,nfeature,initseed,model)
 			# print (noise)
 		# learn W_all, loo, and transform prediction data into shared space
 		W_all = []

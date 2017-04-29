@@ -1,12 +1,13 @@
 #!/usr/bin/env python
 
-# using ICA (FastICA) to find a set of dictionary for each dataset or all datasets involved
-
-# do ICA on bX (nsubjs*nvoxel by nTR) concatenate the data vertically
+# Group ICA for multisubject fMRI data alignment
+# data is a list, but each subject must have the same number of voxels
 
 import numpy as np
+import scipy, math
 from sklearnica import FastICA
 from collections import deque
+from sklearn.utils.extmath import randomized_svd as svd
 from sklearn.utils.extmath import fast_dot
 
 # arguments:
@@ -16,12 +17,13 @@ from sklearn.utils.extmath import fast_dot
 # niter: number of iterations
 # nfeature: number of features
 # initseed: random seed used to initialize W
-# model: indv_ica or all_ica
+# model: indv_gica or all_gica
 # return:
-# W: if indv_ica: a list of 3d arrays (voxel x nfeature x # subj[d]), subject indices not aligned with
+# W: if indv_gica: a list of 3d arrays (voxel x nfeature x # subj[d]), subject indices not aligned with
 # indices in 'data', need train_mb to recover this information when doing transformation; 
-# if all_ica: a 3d array (voxel x nfeature x # all subjects)
+# if all_gica: a 3d array (voxel x nfeature x # all subjects)
 # S: a list of 2d arrays (nfeature x time), each array contains shared response from a single dataset
+
 def align(data, membership, niter, nfeature, initseed, model):
     nsubjs, ndata = membership.shape
     nvoxel = data[0].shape[0]
@@ -43,29 +45,50 @@ def align(data, membership, niter, nfeature, initseed, model):
                 info_tmp.append([m,membership[m,d]])
         info_list.append(np.array(info_tmp,dtype=np.int32))
 
-
     W_raw = []
     S_raw = []
     for d in range(ndata):
-        data_tmp = np.empty(shape=(0,nTR[d]),dtype=np.float32)
+        # Aggregate data in the same dataset
+        bY = np.zeros((nvoxel,nTR[d],subj_data[d]),dtype=np.float32)
+        m_d = 0
         for m in range(nsubjs):
             if membership[m,d] != -1:
-                data_tmp = np.concatenate((data_tmp,data[d][:,:,membership[m,d]]),axis=0)
-        # perform ICA
-        np.random.seed(initseed)
-        A = np.random.rand(nfeature,nfeature).astype(np.float32)
-        ica = FastICA(n_components= nfeature, max_iter=500,w_init=A,random_state=initseed)
-        St = ica.fit_transform(data_tmp.T)
-        S_raw.append(St.T)
-        W_all = ica.mixing_
-        W_tmp = np.zeros((nvoxel,nfeature,subj_data[d]),dtype=np.float32)
+                bY[:,:,m_d] = data[d][:,:,membership[m,d]]
+                m_d += 1
+        # First PCA
+        nfeat1 = min([int(3*nvoxel/4),nTR[d]])
+        Fi = np.zeros((nvoxel,nfeat1,subj_data[d]),dtype=np.float32)
+        Xi = np.zeros((nfeat1,nTR[d],subj_data[d]),dtype=np.float32)
+        X_stack = np.zeros((nfeat1*subj_data[d],nTR[d]),dtype=np.float32)            
         for m in range(subj_data[d]):
-            W_tmp[:,:,m] = W_all[m*nvoxel:(m+1)*nvoxel,:]
-        W_raw.append(W_tmp)
+            Fi[:,:,m], s, VT = tsvd(bY[:,:,m], nfeat1)        
+            Xi[:,:,m] = fast_dot(np.diag(s),VT)
+            X_stack[m*nfeat1:(m+1)*nfeat1,:] = Xi[:,:,m]          
+        # Second PCA
+        G, s, VT = tsvd(X_stack, nfeature)            
+        X = np.nan_to_num(fast_dot(np.diag(s),VT)) # N-by-TR       
+        # ICA
+        np.random.seed(initseed)
+        tmp = np.random.rand(nfeature,nfeature).astype(np.float32)
+        ica = FastICA(n_components= nfeature, max_iter=500,w_init=tmp,whiten=False,random_state=initseed)
+        St = ica.fit_transform(X.T)
+        ES = St.T
+        A = ica.mixing_
+        # Partitioning
+        Gi = np.zeros((nfeat1,nfeature,subj_data[d]),dtype=np.float32)
+        Wi = np.zeros((nvoxel,nfeature,subj_data[d]),dtype=np.float32)
+        for m in range(subj_data[d]):
+            Gi[:,:,m] = G[m*nfeat1:(m+1)*nfeat1,:]
+            Wi[:,:,m] = np.nan_to_num(fast_dot(fast_dot(Fi[:,:,m],Gi[:,:,m]),A))
+        # Assign to each dataset
+        W_raw.append(Wi)
+        S_raw.append(ES)
 
-    if model == 'indv_ica':
+
+    if model == 'indv_gica':
         return W_raw, S_raw
-    elif model == 'all_ica':
+
+    elif model == 'all_gica':
         # rotation
         # use first dataset as base
         W_link = W_raw[0]
@@ -89,6 +112,12 @@ def align(data, membership, niter, nfeature, initseed, model):
         return W, S_raw
     else:
         raise Exception('invalid model')
+
+# compute Truncated SVD with r components and randomized algorithm
+def tsvd(A,r):
+    U,s,VT = svd(A,n_components=r,n_iter=1,flip_sign=False)
+    return U.astype(np.float32),s.astype(np.float32),VT.astype(np.float32)
+
 
 # find the shared subjects between two datasets. 
 # info1 and info2 are the first column of info array of two datasets from info_list.

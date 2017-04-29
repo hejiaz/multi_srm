@@ -309,7 +309,7 @@ def learn_W_jointly(data,S,W,train_mb,test_mb,idx,mode):
 # return:
 # W_all: a 3d array (voxel x nfeature x subjects[idx]), subjects are in the same order as in 'data'
 # loo: a list, index of test subjects in dataset idx
-def learn_W_indv_srm(data,S,W,train_mb,test_mb,idx):
+def learn_W_indv_algo(data,S,W,train_mb,test_mb,idx):
     # shapes
     voxel,nTR,nsubjs = data[idx].shape
     nfeature = S[idx].shape[0]
@@ -347,10 +347,10 @@ def learn_W_indv_srm(data,S,W,train_mb,test_mb,idx):
 def learn_W(data,S,W,train_mb,test_mb,idx,model):
     if model in ['multi_srm','multi_prob']:
         W_all,loo = learn_W_jointly(data,S,W,train_mb,test_mb,idx,'all')
-    elif model in ['srm_rotate']:
+    elif model in ['all_srm']:
         W_all,loo = learn_W_jointly(data,S,W,train_mb,test_mb,idx,'ind')
     elif model in ['indv_srm']:
-        W_all,loo = learn_W_indv_srm(data,S,W,train_mb,test_mb,idx)
+        W_all,loo = learn_W_indv_algo(data,S,W,train_mb,test_mb,idx)
     else:
         raise Exception('model name not valid')
     return W_all,loo

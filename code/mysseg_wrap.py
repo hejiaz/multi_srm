@@ -18,14 +18,14 @@ from run_mysseg import run_mysseg_expt
 # 					run_mysseg_expt(nfeature,initseed,expopt,num_train,loo_flag,model,roi,ds)
 
 
-num_train = 20
+num_train = 10
 loo_flag = True
-ds = [0,1,2,3]
+ds = [1]
 nfeature = 10
 initseed = 0
 expopt = '1st'
 # model = 'srm'
-model = 'multi_prob'
+model = 'indv_srm'
 roi = 'pt'
 
 run_mysseg_expt(nfeature,initseed,expopt,num_train,loo_flag,model,roi,ds)

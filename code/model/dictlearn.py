@@ -5,7 +5,8 @@
 # do ICA on bX (nsubjs*nvoxel by nTR) concatenate the data vertically
 
 import numpy as np
-from sklearnica import FastICA
+from DictLearning import MSDL
+import scipy,copy
 from collections import deque
 from sklearn.utils.extmath import fast_dot
 
@@ -16,17 +17,19 @@ from sklearn.utils.extmath import fast_dot
 # niter: number of iterations
 # nfeature: number of features
 # initseed: random seed used to initialize W
-# model: indv_ica or all_ica
+# model: indv_dict or all_dict
+# loc: a 2d array (voxel x 3), 3d location of each voxel
 # return:
-# W: if indv_ica: a list of 3d arrays (voxel x nfeature x # subj[d]), subject indices not aligned with
+# W: if indv_dict: a list of 3d arrays (voxel x nfeature x # subj[d]), subject indices not aligned with
 # indices in 'data', need train_mb to recover this information when doing transformation; 
-# if all_ica: a 3d array (voxel x nfeature x # all subjects)
+# if all_dict: a 3d array (voxel x nfeature x # all subjects)
 # S: a list of 2d arrays (nfeature x time), each array contains shared response from a single dataset
-def align(data, membership, niter, nfeature, initseed, model):
-    nsubjs, ndata = membership.shape
-    nvoxel = data[0].shape[0]
-    nTR = np.zeros((ndata,),dtype=np.int32)
-    subj_data = np.zeros((ndata,),dtype=np.int32)
+def align(data, membership, niter, nfeature, initseed, model, loc):
+    # size information
+    nsubjs, ndata = membership.shape # total number of subjects and datasets
+    nvoxel = data[0].shape[0] # number of voxels
+    nTR = np.zeros((ndata,),dtype=np.int32) # number of TRs of each dataset
+    subj_data = np.zeros((ndata,),dtype=np.int32) # number of subjects of each dataset
     for d in range(ndata):
         nTR[d] = data[d].shape[1]
         subj_data[d] = np.count_nonzero(membership[:,d] != -1)
@@ -43,29 +46,31 @@ def align(data, membership, niter, nfeature, initseed, model):
                 info_tmp.append([m,membership[m,d]])
         info_list.append(np.array(info_tmp,dtype=np.int32))
 
-
+    
     W_raw = []
     S_raw = []
     for d in range(ndata):
-        data_tmp = np.empty(shape=(0,nTR[d]),dtype=np.float32)
+        data_tmp = []
         for m in range(nsubjs):
             if membership[m,d] != -1:
-                data_tmp = np.concatenate((data_tmp,data[d][:,:,membership[m,d]]),axis=0)
-        # perform ICA
-        np.random.seed(initseed)
-        A = np.random.rand(nfeature,nfeature).astype(np.float32)
-        ica = FastICA(n_components= nfeature, max_iter=500,w_init=A,random_state=initseed)
-        St = ica.fit_transform(data_tmp.T)
-        S_raw.append(St.T)
-        W_all = ica.mixing_
-        W_tmp = np.zeros((nvoxel,nfeature,subj_data[d]),dtype=np.float32)
+                data_tmp.append(data[d][:,:,membership[m,d]])
+        # perform dictionary learning
+        dict_learning = MSDL(factors= nfeature, rand_seed=initseed, n_iter=niter)
+        dict_learning.fit(data_tmp,R=loc)
+        W_tmp = dict_learning.Vs_
+        W_data = np.zeros((nvoxel,nfeature,subj_data[d]),dtype=np.float32)
         for m in range(subj_data[d]):
-            W_tmp[:,:,m] = W_all[m*nvoxel:(m+1)*nvoxel,:]
-        W_raw.append(W_tmp)
+            W_data[:,:,m] = W_tmp[m]
+        S_tmp = dict_learning.Us_
+        S_data = np.zeros((nfeature,nTR[d]),dtype=np.float32)
+        for m in range(subj_data[d]):
+            S_data += S_tmp[m].T/subj_data[d]
+        W_raw.append(W_data)
+        S_raw.append(S_data)
 
-    if model == 'indv_ica':
+    if model == 'indv_dict':
         return W_raw, S_raw
-    elif model == 'all_ica':
+    elif model == 'all_dict':
         # rotation
         # use first dataset as base
         W_link = W_raw[0]

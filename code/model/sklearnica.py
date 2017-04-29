@@ -7,12 +7,9 @@ Independent Component Analysis, by  Hyvarinen et al.
 # Authors: Pierre Lafaye de Micheaux, Stefan van der Walt, Gael Varoquaux,
 #          Bertrand Thirion, Alexandre Gramfort, Denis A. Engemann
 # License: BSD 3 clause
-import sys, os
-sys.path.insert(0, os.path.abspath('..'))
-import warnings
-from utils import mynumpy as np
 from scipy import linalg
-
+import warnings
+import numpy as np
 from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.externals import six
 from sklearn.externals.six import moves
@@ -41,7 +38,7 @@ def _gs_decorrelation(w, W, j):
     Assumes that W is orthogonal
     w changed in place
     """
-    w -= np.dot(np.dot(w, W[:j].T), W[:j])
+    w -= fast_dot(fast_dot(w, W[:j].T), W[:j])
     return w
 
 
@@ -49,10 +46,10 @@ def _sym_decorrelation(W):
     """ Symmetric decorrelation
     i.e. W <- (W * W.T) ^{-1/2} * W
     """
-    s, u = linalg.eigh(np.dot(W, W.T))
+    s, u = linalg.eigh(fast_dot(W, W.T))
     # u (resp. s) contains the eigenvectors (resp. square roots of
     # the eigenvalues) of W * W.T
-    return np.dot(np.dot(u * (1. / np.sqrt(s)), u.T), W)
+    return np.nan_to_num(fast_dot(fast_dot(u * (1. / np.sqrt(s)), u.T), W))
 
 
 def _ica_def(X, tol, g, fun_args, max_iter, w_init):
@@ -98,8 +95,7 @@ def _ica_par(X, tol, g, fun_args, max_iter, w_init):
     p_ = float(X.shape[1])
     for ii in moves.xrange(max_iter):
         gwtx, g_wtx = g(fast_dot(W, X), fun_args)
-        W1 = _sym_decorrelation(fast_dot(gwtx, X.T) / p_
-                                - g_wtx[:, np.newaxis] * W)
+        W1 = _sym_decorrelation(np.nan_to_num(fast_dot(gwtx, X.T) / p_- g_wtx[:, np.newaxis] * W))
         del gwtx, g_wtx
         # builtin max, abs are faster than numpy counter parts.
         lim = max(abs(abs(np.diag(fast_dot(W1, W.T))) - 1))
@@ -283,7 +279,7 @@ def fastica(X, n_components=None, algorithm="parallel", whiten=True,
         del _
         K = (u / d).T[:n_components]  # see (6.33) p.140
         del u, d
-        X1 = np.dot(K, X)
+        X1 = fast_dot(K, X)
         # see (13.6) p.267 Here X1 is white and data
         # in X has been projected onto a subspace by PCA
         X1 *= np.sqrt(p)

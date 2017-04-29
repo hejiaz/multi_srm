@@ -4,15 +4,22 @@
 
 import numpy as np
 from scipy.stats.mstats import zscore
-from multi_prob import align as prob
-from multi_srm import align as nonprob
+from dictlearn import align
 
 ndata = 3
 nsubjs = 6
 initseed = 0
-nvoxel = 100
+nvoxel = 125
 nfeature = 20
 nTR = [200,60,140]
+
+loc = np.zeros((125,3),dtype=np.int32)
+idx = 0
+for i in range(5):
+    for j in range(5):
+        for k in range(5):
+            loc[idx,:] = np.array([i,j,k],dtype=np.int32)
+            idx += 1
 
 # random W
 W = np.zeros((nvoxel,nfeature,nsubjs),dtype=np.float32)
@@ -43,7 +50,7 @@ for d in range(ndata):
 	data.append(data_tmp)
 
 data[0][:,:,4] = W[:,:,2].dot(S[0])+np.random.rand(nvoxel,nTR[0]).astype(np.float32)
-data[0][:,:,1] = np.zeros((nvoxel,nTR[0]),dtype=np.float32)
+# data[0][:,:,1] = np.zeros((nvoxel,nTR[0]),dtype=np.float32)
 membership[2,0] = 4
 
 def zscore_data(data):
@@ -60,15 +67,12 @@ def zscore_data_all(data):
 for d in range(ndata):
 	data[d] = zscore_data_all(data[d])
 
-W_new,S_new = prob(data,membership,20,nfeature,initseed)
-W2,S2 = nonprob(data,membership,20,nfeature,initseed)
+W_new,S_new = align(data,membership,20,nfeature,initseed,'all_dict',loc)
 
-for m in range(nsubjs):
-    print ('subj: '+str(m))
-    print (np.linalg.norm(W_new[:,:,m]-W[:,:,m]))
-    print (np.linalg.norm(W2[:,:,m]-W[:,:,m]))
-    print (np.linalg.norm(W2[:,:,m]-W_new[:,:,m]))
-
+print (len(S_new))
 print (W_new.shape)
 print (S_new[0].shape)
-# print (noise)
+
+
+
+
