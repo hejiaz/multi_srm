@@ -5,7 +5,7 @@
 # do ICA on bX (nsubjs*nvoxel by nTR) concatenate the data vertically
 
 import numpy as np
-from DictLearning import MSDL
+from .DictLearning import MSDL
 import scipy,copy
 from collections import deque
 from sklearn.utils.extmath import fast_dot
@@ -20,6 +20,7 @@ from sklearn.utils.extmath import fast_dot
 # model: indv_dict or all_dict
 # loc: a 2d array (voxel x 3), 3d location of each voxel
 # return:
+# W_all: group spatial basis. if indv_dict: a list of 2d arrays (voxel x nfeature); if all_dict: a 2d array (voxel x nfeature)
 # W: if indv_dict: a list of 3d arrays (voxel x nfeature x # subj[d]), subject indices not aligned with
 # indices in 'data', need train_mb to recover this information when doing transformation; 
 # if all_dict: a 3d array (voxel x nfeature x # all subjects)
@@ -46,7 +47,7 @@ def align(data, membership, niter, nfeature, initseed, model, loc):
                 info_tmp.append([m,membership[m,d]])
         info_list.append(np.array(info_tmp,dtype=np.int32))
 
-    
+    W_all_raw = []
     W_raw = []
     S_raw = []
     for d in range(ndata):
@@ -61,15 +62,18 @@ def align(data, membership, niter, nfeature, initseed, model, loc):
         W_data = np.zeros((nvoxel,nfeature,subj_data[d]),dtype=np.float32)
         for m in range(subj_data[d]):
             W_data[:,:,m] = W_tmp[m]
+
         S_tmp = dict_learning.Us_
         S_data = np.zeros((nfeature,nTR[d]),dtype=np.float32)
         for m in range(subj_data[d]):
             S_data += S_tmp[m].T/subj_data[d]
+
+        W_all_raw.append(dict_learning.V_)
         W_raw.append(W_data)
         S_raw.append(S_data)
 
     if model == 'indv_dict':
-        return W_raw, S_raw
+        return W_all_raw,W_raw, S_raw
     elif model == 'all_dict':
         # rotation
         # use first dataset as base
@@ -90,8 +94,14 @@ def align(data, membership, niter, nfeature, initseed, model, loc):
                 S_raw[not_linked[0]] = fast_dot(R,S_raw[not_linked[0]])
                 not_linked.popleft()    
         # reorder
-        W = W_link[:,:,info_link.argsort()]   
-        return W, S_raw
+        W = W_link[:,:,info_link.argsort()]  
+
+        # compute new W_all for this set
+        Vs = []
+        for m in range(nsubjs):
+            Vs.append(W[:,:,m])
+        W_all = dict_learning. _update_v(nsubjs*[0], Vs)
+        return W_all,W, S_raw
     else:
         raise Exception('invalid model')
 

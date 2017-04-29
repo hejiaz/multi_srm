@@ -114,22 +114,33 @@ def run_mysseg_expt(nfeature,initseed,expopt,num_train,loo_flag,model,roi,ds):
 		raise Exception('expopt has to be 1st or 2nd')
 	del data
 
+	# load location information for dictionary learning
+	if model in ['all_dict','indv_dict']:
+		ws = np.load(options['input_path']+'multi_srm/roi_location.npz')
+		loc = ws[roi]
+		del ws
+
 	print ('alignment')
 	if model not in ['avg']:
 		# alignment
 		# S is the transformed alignment data from training subjects
-		if model not in ['multi_prob']:
-			W,S = align.align(data_align,train_mb,niter,nfeature,initseed,model)
-		else:
+		if model in ['multi_srm']:
 			W,S,noise = align.align(data_align,train_mb,niter,nfeature,initseed,model)
+		elif model in ['all_dict','indv_dict']:
+			W_grp,W,S= align.align(data_align,train_mb,niter,nfeature,initseed,model,loc)
+		else:
+			W,S = align.align(data_align,train_mb,niter,nfeature,initseed,model)
 			# print (noise)
 		# learn W_all, loo, and transform prediction data into shared space
 		W_all = []
 		transformed_pred = []
 		loo = []
 		for d in range(ndata):
-			W_tmp,loo_tmp = ut.learn_W(data_align,S,W,train_mb,test_mb,d,model)
-			transformed_pred.append(ut.transform(data_pred[d],W_tmp))
+			if model in ['all_dict','indv_dict']:
+				W_tmp,loo_tmp = ut.learn_W(data_align,S,W,train_mb,test_mb,d,model,W_grp)
+			else:
+				W_tmp,loo_tmp = ut.learn_W(data_align,S,W,train_mb,test_mb,d,model)
+			transformed_pred.append(ut.transform(data_pred[d],W_tmp,model))
 			W_all.append(W_tmp)
 			loo.append(loo_tmp)
 		# # save W
@@ -162,91 +173,4 @@ def run_mysseg_expt(nfeature,initseed,expopt,num_train,loo_flag,model,roi,ds):
 	out_file = options['output_path']+'accu/mysseg/'+model+'/'+'{}_feat{}_ntrain{}_rand{}_{}_ds{}.pickle'.format(roi,nfeature,num_train,initseed,expopt,ds)
 	with open(out_file,'wb') as fid:
 		pickle.dump(accu,fid,pickle.HIGHEST_PROTOCOL)
-
-
-
-
-
-# def run_mysseg_expt(nfeature,initseed,expopt,num_train,loo_flag,model,roi,ds):
-# 	# parameters
-# 	expt = 'mysseg'
-# 	niter = 20
-
-# 	print (model)
-# 	print (roi)
-
-# 	# import alignment and experiment method
-# 	align = importlib.import_module('model.'+model)
-# 	pred = importlib.import_module('experiment.'+expt)
-
-# 	# load path
-# 	setting = open('setting.yaml')
-# 	options = yaml.safe_load(setting)
-
-# 	# load membership info
-# 	ws = np.load(options['input_path']+'multi_srm/membership.npz')
-# 	membership = ws['membership']
-
-# 	# extract datasets we want to use
-# 	membership = membership[:,ds][:,None]
-# 	membership = ut.remove_invalid_membership(membership)
-# 	nsubjs,ndata = membership.shape
-# 	print (membership)
-
-# 	train_mb = membership
-# 	test_mb = np.empty((0,ndata),dtype=np.int32)
-# 	num_train = nsubjs
-
-# 	# load input data
-# 	print ('load data')
-# 	with open(options['input_path']+'multi_srm/{}_data_all.pickle'.format(roi),'rb') as fid:
-# 	    data_tmp = pickle.load(fid)
-
-# 	# extract datasets we want to use
-# 	data = data_tmp[ds]
-# 	del data_tmp
-
-# 	# reorder data
-# 	data_new = np.zeros_like(data)
-# 	mem_new = np.zeros_like(train_mb)
-# 	m_d = 0
-# 	for m in range(nsubjs):
-# 		if train_mb[m,0] != -1:
-# 			data_new[:,:,m_d] = data[:,:,train_mb[m,0]]
-# 			mem_new[m,0] = m_d
-# 			m_d += 1
-
-# 	print (mem_new)
-
-# 	# separate alignment and prediction data
-# 	TR_1st = int(data_new.shape[1]/2)
-# 	data_pred = ut.zscore_data_all(data[:,:TR_1st,:])
-# 	data_align = ut.zscore_data_all(data[:,TR_1st:,:])
-# 	data_align_srm = ut.zscore_data_all(data_new[:,TR_1st:,:])
-# 	del data_new,data
-
-
-# 	print ('alignment')
-
-# 	# alignment
-# 	# S is the transformed alignment data from training subjects
-# 	# _,_,W,_,_,S = align.srm(data_align_srm,niter,nfeature,initseed)
-# 	W,S = align.align([data_align],train_mb,niter,nfeature,initseed)
-# 	# learn W_all, loo, and transform prediction data into shared space
-# 	transformed_pred = []
-# 	for d in range(ndata):
-# 		# W_tmp,_ = ut.learn_W([data_align],S,[W],mem_new,test_mb,d,model)
-# 		W_tmp,_ = ut.learn_W([data_align],S,W,train_mb,test_mb,d,model)
-# 		transformed_pred.append(ut.transform(data_pred,W_tmp))
-# 	del S
-
-# 	print ('run experiment')
-# 	accu = []
-# 	for d in range(ndata):
-# 		accu.append(pred.predict(transformed_pred[d]))
-# 		print ('accu'+str(d)+' : '+str(np.mean(accu[d])))
-
-
-
-
 

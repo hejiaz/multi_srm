@@ -29,7 +29,7 @@ The implementation is based on the following publication:
 import numpy as np
 import scipy
 import scipy.sparse
-from sklearnica import FastICA
+from .sklearnica import FastICA
 from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.utils import assert_all_finite
 from sklearn.utils.validation import NotFittedError

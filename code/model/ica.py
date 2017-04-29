@@ -5,7 +5,7 @@
 # do ICA on bX (nsubjs*nvoxel by nTR) concatenate the data vertically
 
 import numpy as np
-from sklearnica import FastICA
+from .sklearnica import FastICA
 from collections import deque
 from sklearn.utils.extmath import fast_dot
 

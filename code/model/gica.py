@@ -5,7 +5,7 @@
 
 import numpy as np
 import scipy, math
-from sklearnica import FastICA
+from .sklearnica import FastICA
 from collections import deque
 from sklearn.utils.extmath import randomized_svd as svd
 from sklearn.utils.extmath import fast_dot
