@@ -70,7 +70,7 @@ def align(data, membership, niter, nfeature, initseed, model):
         # ICA
         np.random.seed(initseed)
         tmp = np.random.rand(nfeature,nfeature).astype(np.float32)
-        ica = FastICA(n_components= nfeature, max_iter=500,w_init=tmp,whiten=False,random_state=initseed)
+        ica = FastICA(n_components= nfeature, max_iter=750,w_init=tmp,whiten=False,random_state=initseed)
         St = ica.fit_transform(X.T)
         ES = St.T
         A = ica.mixing_

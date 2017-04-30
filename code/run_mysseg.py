@@ -22,10 +22,10 @@ import random
 # roi = 'pt'
 # ds = [0,1,2,3] # which datasets to use: greeneye,milky,vodka,sherlock
 
-def run_mysseg_expt(nfeature,initseed,expopt,num_train,loo_flag,model,roi,ds):
+def run_expt(nfeature,initseed,expopt,num_train,loo_flag,model,roi,ds):
 	# parameters
 	expt = 'mysseg'
-	niter = 20
+	niter = 50
 
 	print (model)
 	print (roi)

@@ -454,7 +454,7 @@ class MSDL(BaseEstimator, TransformerMixin):
         """
         subjects = len(data)
         voxels = data[0].shape[0]
-        fica = FastICA(n_components=factors, whiten=True, max_iter=200,
+        fica = FastICA(n_components=factors, whiten=True, max_iter=300,
                        random_state=self.rand_seed)
         samples = 0
         for i in range(subjects):

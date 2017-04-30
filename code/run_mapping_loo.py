@@ -21,7 +21,7 @@ import random
 # roi = 'dmn'
 # loo_ds = 1 # which datasets to leave out: greeneye,milky,vodka,sherlock
 
-def run_mapping_loo_expt(nfeature,initseed,word_dim,model,roi,loo_ds):
+def run_expt(nfeature,initseed,word_dim,model,roi,loo_ds):
 	# parameters
 	expt = 'mapping'
 	# expt = 'mapping_avg'

@@ -54,7 +54,7 @@ def align(data, membership, niter, nfeature, initseed, model):
         # perform ICA
         np.random.seed(initseed)
         A = np.random.rand(nfeature,nfeature).astype(np.float32)
-        ica = FastICA(n_components= nfeature, max_iter=500,w_init=A,random_state=initseed)
+        ica = FastICA(n_components= nfeature, max_iter=750,w_init=A,random_state=initseed)
         St = ica.fit_transform(data_tmp.T)
         S_raw.append(St.T)
         W_all = ica.mixing_

@@ -1,0 +1,10 @@
+chosen from mysseg
+eac:
+multi_srm: 100
+
+
+
+
+pt:
+multi_srm: 75
+

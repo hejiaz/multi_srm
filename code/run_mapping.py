@@ -23,7 +23,7 @@ import random
 # roi = 'dmn'
 # ds = [0,1,2,3] # which datasets to use: greeneye,milky,vodka,sherlock
 
-def run_mapping_expt(nfeature,initseed,expopt,word_dim,num_train,loo_flag,model,roi,ds):
+def run_expt(nfeature,initseed,expopt,word_dim,num_train,loo_flag,model,roi,ds):
 	# parameters
 	expt = 'mapping'
 	# expt = 'mapping_avg'

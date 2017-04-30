@@ -18,7 +18,7 @@ import utils as ut
 # loo_ds = 1 # left-out dataset, can't leave out 0
 # other_ds = [0,2,3] # the merging order of other datasets
 
-def left_out_dataset_expt(nfeature,initseed,roi,loo_ds,other_ds):
+def run_expt(nfeature,initseed,roi,loo_ds,other_ds):
 	# parameters
 	expt = 'mysseg'
 	model = 'multi_srm'
