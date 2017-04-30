@@ -11,7 +11,8 @@ import pickle
 import importlib
 import utils as ut
 import random
-
+import sys, os
+sys.path.insert(0, os.path.abspath('..'))
 
 # nfeature = 20
 # initseed = 0
@@ -48,7 +49,8 @@ def run_expt(nfeature,initseed,word_dim,model,roi,loo_ds):
 	pred = importlib.import_module('experiment.'+expt)
 
 	# load path
-	setting = open('setting.yaml')
+	# setting = open('setting.yaml')
+	setting = open('../setting.yaml')
 	options = yaml.safe_load(setting)
 
 	# load membership info

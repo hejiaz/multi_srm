@@ -10,7 +10,8 @@ import pickle
 import importlib
 import utils as ut
 import random
-
+import sys, os
+sys.path.insert(0, os.path.abspath('..'))
 
 # nfeature = 25
 # initseed = 0
@@ -49,7 +50,8 @@ def run_expt(nfeature,initseed,expopt,num_train,loo_flag,model,roi,ds):
 	pred = importlib.import_module('experiment.'+expt)
 
 	# load path
-	setting = open('setting.yaml')
+	# setting = open('setting.yaml')
+	setting = open('../setting.yaml')
 	options = yaml.safe_load(setting)
 
 	# load membership info

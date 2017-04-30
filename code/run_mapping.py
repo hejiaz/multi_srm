@@ -10,18 +10,8 @@ import pickle
 import importlib
 import utils as ut
 import random
-
-
-# nfeature = 20
-# initseed = 0
-# expopt = '1st'
-# word_dim = 300
-# num_train = 40
-# loo_flag = True
-# # model = ['multi_srm','srm_rotate','srm_rotate_ind','indv_srm','avg']
-# model = 'srm_rotate'
-# roi = 'dmn'
-# ds = [0,1,2,3] # which datasets to use: greeneye,milky,vodka,sherlock
+import sys, os
+sys.path.insert(0, os.path.abspath('..'))
 
 def run_expt(nfeature,initseed,expopt,word_dim,num_train,loo_flag,model,roi,ds):
 	# parameters
@@ -30,7 +20,7 @@ def run_expt(nfeature,initseed,expopt,word_dim,num_train,loo_flag,model,roi,ds):
 	niter = 50
 	num_previous = 8
 	# num_chunks = 25
-	num_chunks = [15,10,10,50] # different number of scenes for different datasets, make sure the scene length is not too short
+	num_chunks = [15,10,10,40] # different number of scenes for different datasets, make sure the scene length is not too short
 	pre = ''
 
 	print (model)
@@ -49,7 +39,8 @@ def run_expt(nfeature,initseed,expopt,word_dim,num_train,loo_flag,model,roi,ds):
 	pred = importlib.import_module('experiment.'+expt)
 
 	# load path
-	setting = open('setting.yaml')
+	setting = open('../setting.yaml')
+	# setting = open('setting.yaml')
 	options = yaml.safe_load(setting)
 
 	# load membership info
