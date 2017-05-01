@@ -29,8 +29,8 @@ def predict(transformed_data,word_tst,W_ft,num_chunks,num_previous):
         fmri_tst = add_prev_time_steps(transformed_subj_data, num_previous)            
         # comparisons in Semantic space (i.e. fMRI -> text) (procrustes)
         FT_prediction = fast_dot(W_ft, fmri_tst)
-        class_data[m] = scene_classification(word_tst, FT_prediction, num_chunks)
-        rank_data[m] = scene_ranking(word_tst, FT_prediction, num_chunks)
+        class_all[m] = scene_classification(word_tst, FT_prediction, num_chunks)
+        rank_all[m] = scene_ranking(word_tst, FT_prediction, num_chunks)
     # return accu_class,accu_rank
     return class_all, rank_all
 

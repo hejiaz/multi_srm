@@ -188,7 +188,6 @@ def find_train_test_subj(train_mb,test_mb,idx):
             test_subj.append(test_mb[m,idx])
     return train_subj,test_subj
 
-
 # learn W matrix of test subjects in a single dataset using data from all datasets
 # arguments:
 # data: a list of 3d arrays (voxel x time x subjects[d]), each array contains align data (used to compute S)
@@ -246,6 +245,9 @@ def learn_test_W_use_single_dataset(data,S,test_mb,idx,model,W_all=None):
                 pert = np.eye(voxel,M=nfeature,dtype=np.float32)
                 Um, _, Vm = np.linalg.svd(Am+0.0001*pert, full_matrices=False)
                 W_tmp = fast_dot(Um,Vm)  # W = UV^T 
+            elif model in ['all_dict']:
+                A = fast_dot(S_tmp,S_tmp.T) + np.eye(nfeature,dtype=np.float32)
+                W_tmp = W_all + np.linalg.solve(A, fast_dot(S_tmp,(X_tmp.T - fast_dot(S_tmp.T,W_all.T)))).T
             else:
                 # solve least square
                 tmp1 = fast_dot(S_tmp,S_tmp.T)
@@ -267,9 +269,6 @@ def learn_test_W_use_single_dataset(data,S,test_mb,idx,model,W_all=None):
             #     # decorrelation
             #     s, u = linalg.eigh(fast_dot(W_tmp, W_tmp.T))
             #     W_tmp = np.nan_to_num(fast_dot(fast_dot(u * np.nan_to_num(1. / np.sqrt(s)), u.T), W_tmp))
-            # elif model in ['all_dict']:
-            #     A = fast_dot(S_tmp,S_tmp.T) + np.eye(nfeature,dtype=np.float32)
-            #     W_tmp = W_all + np.linalg.solve(A, fast_dot(S_tmp,(X_tmp.T - fast_dot(S_tmp.T,W_all.T)))).T
             # else:
             #     raise Exception('invalid model')
             W = np.concatenate((W,W_tmp[:,:,None]),axis=2)
@@ -374,6 +373,9 @@ def learn_W_indv_algo(data,S,W,train_mb,test_mb,idx,model,W_all=None):
             pert = np.eye(voxel,M=nfeature,dtype=np.float32)
             Um, _, Vm = np.linalg.svd(Am+0.0001*pert, full_matrices=False)
             W_tmp = fast_dot(Um,Vm)  # W = UV^T 
+        elif model in ['indv_dict']:
+            A = fast_dot(S_tmp,S_tmp.T) + np.eye(nfeature,dtype=np.float32)
+            W_tmp = W_all[idx] + np.linalg.solve(A, fast_dot(S_tmp,(X_tmp.T - fast_dot(S_tmp.T,W_all[idx].T)))).T
         else: 
             # solve least square
             tmp1 = fast_dot(S_tmp,S_tmp.T)
@@ -395,9 +397,6 @@ def learn_W_indv_algo(data,S,W,train_mb,test_mb,idx,model,W_all=None):
         #     # decorrelation
         #     s, u = linalg.eigh(fast_dot(W_tmp, W_tmp.T))
         #     W_tmp = np.nan_to_num(fast_dot(fast_dot(u * np.nan_to_num(1. / np.sqrt(s)), u.T), W_tmp))
-        # elif model in ['indv_dict']:
-        #     A = fast_dot(S_tmp,S_tmp.T) + np.eye(nfeature,dtype=np.float32)
-        #     W_tmp = W_all[idx] + np.linalg.solve(A, fast_dot(S_tmp,(X_tmp.T - fast_dot(S_tmp.T,W_all[idx].T)))).T
         # else:
         #     raise Exception('invalid model')
         W_new[:,:,test_subj[m]] = W_tmp  # W = UV^T 

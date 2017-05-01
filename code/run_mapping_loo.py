@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 # Run fMRI to word embedding experiment using multi-dataset SRM. Leave out a whole dataset (loo_ds) for testing.
-# Learn a global linear mapping for data from the other datasets. Use the shared subjects between lo_ds
+# Learn a global linear mapping for data from the other datasets. Use the shared subjects between loo_ds
 # and the other datasets to learn W for loo_ds
 # By Hejia Zhang @ Princeton
 
@@ -14,32 +14,33 @@ import random
 import sys, os
 sys.path.insert(0, os.path.abspath('..'))
 
-# nfeature = 20
-# initseed = 0
-# word_dim = 300
-# # model = ['multi_srm','srm_rotate','srm_rotate_ind','indv_srm','avg']
-# model = 'srm_rotate'
-# roi = 'dmn'
+
 # loo_ds = 1 # which datasets to leave out: greeneye,milky,vodka,sherlock
 
-def run_expt(nfeature,initseed,word_dim,model,roi,loo_ds):
+def run_expt(nfeature,initseed,model,roi,loo_ds):
 	# parameters
-	expt = 'mapping'
-	# expt = 'mapping_avg'
+	expt = 'mapping_loo'
 	train_ds = [0,1,2,3]
+	word_ds = [0,1,2,3]
 	niter = 50
 	num_previous = 8
-	num_chunks = [15,10,10,50] # different number of scenes for different datasets, make sure the scene length is not too short
-	# num_chunks = 25
+	word_dim = 300
+	num_chunks = [7,4,4,25] # different number of scenes for different datasets, make sure the scene length is not too short
 	pre = ''
 
 	print (model)
 	print (roi)
 
 	# import alignment and experiment method
-	if model in ['srm_rotate_ind']:
-		align = importlib.import_module('model.srm_rotate')
-	elif model in ['multi_srm','srm_rotate','indv_srm']:
+	if model in ['all_srm','indv_srm']:
+		align = importlib.import_module('model.srm')
+	elif model in ['all_ica','indv_ica']:
+		align = importlib.import_module('model.ica')
+	elif model in ['all_gica','indv_gica']:
+		align = importlib.import_module('model.gica')
+	elif model in ['all_dict','indv_dict']:
+		align = importlib.import_module('model.dictlearn')		
+	elif model in ['multi_srm']:
 		align = importlib.import_module('model.'+model)
 	elif model in ['avg']:
 		align = None
@@ -56,6 +57,12 @@ def run_expt(nfeature,initseed,word_dim,model,roi,loo_ds):
 	# load membership info
 	ws = np.load(options['input_path']+'multi_srm/membership.npz')
 	membership = ws['membership']
+
+	# load location information for dictionary learning
+	if model in ['all_dict','indv_dict']:
+		ws = np.load(options['input_path']+'multi_srm/roi_location.npz')
+		loc = ws[roi]
+		del ws
 
 	# separate training membership 
 	train_ds.remove(loo_ds)
@@ -75,14 +82,24 @@ def run_expt(nfeature,initseed,word_dim,model,roi,loo_ds):
 	with open(options['input_path']+'multi_srm/'+pre+'word_embedding{}_all.pickle'.format(word_dim),'rb') as fid:
 	    word = pickle.load(fid)
 
+
+
 	# extract datasets we want to use
 	data_align = []
 	word_align = []
 	for d in range(len(train_ds)):
 		data_align.append(data[train_ds[d]])
 		word_align.append(word[train_ds[d]])
+
 	data_pred = data[loo_ds]
 	word_pred = word[loo_ds]
+
+	new_ds = []
+	for w in word_ds:
+		try:
+			new_ds.append(train_ds.index(w))
+		except:
+			continue
 
 	# extract data of shared subjects in left-out dataset for learning S_loo later
 	data_loo_shared = data_pred[:,:,idx_loo]
@@ -91,7 +108,12 @@ def run_expt(nfeature,initseed,word_dim,model,roi,loo_ds):
 	if model not in ['avg']:
 		# alignment
 		# S is the transformed alignment data from training subjects
-		W,S = align.align(data_align,train_mb,niter,nfeature,initseed)
+		if model in ['multi_srm']:
+			W,S,noise = align.align(data_align,train_mb,niter,nfeature,initseed,model)
+		elif model in ['all_dict','indv_dict']:
+			W_grp,W,S= align.align(data_align,train_mb,niter,nfeature,initseed,model,loc)
+		else:
+			W,S = align.align(data_align,train_mb,niter,nfeature,initseed,model)
 	else:
 		# average alignment data of training subjects as transformed alignment data
 		S = []
@@ -101,52 +123,31 @@ def run_expt(nfeature,initseed,word_dim,model,roi,loo_ds):
 	print ('learn linear mapping')
 	# learn linear mapping using:
 	# 1) concatenate transformed alignment data from training datasets
-	S_train = S[0]
-	for i in range(1,len(train_ds)):
-		S_train = np.concatenate((S_train,S[i]),axis=1)
 	# 2) concatenate word embeddings for alignment data
-	word_train = word_align[0]
-	for i in range(1,len(train_ds)):
-		word_train = np.concatenate((word_train,word_align[i]),axis=1)
-
-	# process word embeddings
-	word_align_all,word_pred_all = pred.process_semantic(word_train,word_pred,num_previous)
-	W_ft = pred.learn_linear_map([S_train],word_align_all,num_previous)
+	word_align_all,word_pred_all = pred.process_semantic([word_align[n] for n in new_ds],word_pred,num_previous)
+	W_ft = pred.learn_linear_map([S[n] for n in new_ds],word_align_all,num_previous)
 
 	print ('transform left-out dataset')
 	if model not in ['avg']:
 		# learn S using shared subjects
-		S_loo = np.mean(ut.transform(data_loo_shared,W[:,:,idx_train]),axis=2)
+		S_loo = np.mean(ut.transform(data_loo_shared,W[:,:,idx_train],model),axis=2)
 		# learn W of all subjects using S_loo
-		W_loo = ut.learn_W_loo_ds(data_pred,S_loo)
-		transformed_pred = ut.transform(data_pred,W_loo)
+		W_loo = ut.learn_W_loo_ds(data_pred,S_loo,model)
+		transformed_pred = ut.transform(data_pred,W_loo,model)
 	else:
 		transformed_pred = data_pred	
 
 	print ('run experiment')
-	accu_class,accu_rank = pred.predict([transformed_pred],[word_pred_all],W_ft,[num_chunks[loo_ds]],num_previous)
+	accu_class,accu_rank = pred.predict(transformed_pred,word_pred_all,W_ft,num_chunks[loo_ds],num_previous)
 
-	accu_class_mean = [np.mean(a) for a in accu_class]
-	accu_rank_mean = [np.mean(a) for a in accu_rank]
 	print ('results:')
-	print ('accu_class: '+str(accu_class_mean))
-	print ('accu_rank: '+str(accu_rank_mean))
+	print ('accu_class: '+str(np.mean(accu_class)))
+	print ('accu_rank: '+str(np.mean(accu_rank)))
+
 	# save results
-	if not os.path.exists(options['output_path']+'accu/'+pre+'mapping{}_loo/'.format(word_dim)+model+'/'):
-		os.makedirs(options['output_path']+'accu/'+pre+'mapping{}_loo/'.format(word_dim)+model+'/')
-	with open(options['output_path']+'accu/'+pre+'mapping{}_loo/'.format(word_dim)+model+'/'+'{}_chunks{}_feat{}_rand{}_loods{}_class.pickle'.format(roi,num_chunks[loo_ds],nfeature,initseed,loo_ds),'wb') as fid:
-		pickle.dump(accu_class,fid,pickle.HIGHEST_PROTOCOL)
-	with open(options['output_path']+'accu/'+pre+'mapping{}_loo/'.format(word_dim)+model+'/'+'{}_chunks{}_feat{}_rand{}_loods{}_rank.pickle'.format(roi,num_chunks[loo_ds],nfeature,initseed,loo_ds),'wb') as fid:
-		pickle.dump(accu_rank,fid,pickle.HIGHEST_PROTOCOL)
-
-
-	# print ('results:')
-	# print ('accu_class: '+str(accu_class))
-	# print ('accu_rank: '+str(accu_rank))
-	# # save results
-	# if not os.path.exists(options['output_path']+'accu/'+pre+'mapping{}_loo/'.format(word_dim)+model+'/'):
-	# 	os.makedirs(options['output_path']+'accu/'+pre+'mapping{}_loo/'.format(word_dim)+model+'/')
-	# np.savez_compressed(options['output_path']+'accu/'+pre+'mapping{}_loo/'.format(word_dim)+model+'/'+'{}_chunks{}_feat{}_rand{}_loods{}.npz'.format(roi,num_chunks,nfeature,initseed,loo_ds),accu_class=accu_class,accu_rank=accu_rank)
+	if not os.path.exists(options['output_path']+'accu/mapping_loo/'+model+'/'):
+		os.makedirs(options['output_path']+'accu/mapping_loo/'+model+'/')
+	np.savez_compressed(options['output_path']+'accu/mapping_loo/'+model+'/{}_feat{}_rand{}_loods{}.npz'.format(roi,nfeature,initseed,loo_ds),accu_class=accu_class,accu_rank=accu_rank)
 
 
 

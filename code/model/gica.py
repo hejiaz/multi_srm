@@ -32,7 +32,8 @@ def align(data, membership, niter, nfeature, initseed, model):
     for d in range(ndata):
         nTR[d] = data[d].shape[1]
         subj_data[d] = np.count_nonzero(membership[:,d] != -1)
-
+    if nfeature>min([nTR[d]]):
+        raise Exception('number of features must be smaller than number of TR: '+str(min([nTR[d]])))
     # Separate membership information of each dataset
     # info_list is a list of length ndata. Each element info_list[d] is a 2d array (subj_data[d] x 2)
     # row m of info_list[d]: [idx1, idx2]. Both idx1 and idx2 are index of the m'th subject of dataset d

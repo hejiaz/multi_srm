@@ -33,9 +33,15 @@ def run_expt(nfeature,initseed,expopt,num_train,loo_flag,model,roi,ds):
 	print (roi)
 
 	# import alignment and experiment method
-	if model in ['srm_rotate_ind']:
-		align = importlib.import_module('model.srm_rotate')
-	elif model in ['multi_srm','srm_rotate','indv_srm']:
+	if model in ['all_srm','indv_srm']:
+		align = importlib.import_module('model.srm')
+	elif model in ['all_ica','indv_ica']:
+		align = importlib.import_module('model.ica')
+	elif model in ['all_gica','indv_gica']:
+		align = importlib.import_module('model.gica')
+	elif model in ['all_dict','indv_dict']:
+		align = importlib.import_module('model.dictlearn')		
+	elif model in ['multi_srm']:
 		align = importlib.import_module('model.'+model)
 	elif model in ['avg']:
 		align = None
@@ -86,6 +92,13 @@ def run_expt(nfeature,initseed,expopt,num_train,loo_flag,model,roi,ds):
 	with open(options['input_path']+'multi_srm/{}_data_all.pickle'.format(roi),'rb') as fid:
 	    data_tmp = pickle.load(fid)
 
+	# load location information for dictionary learning
+	if model in ['all_dict','indv_dict']:
+		ws = np.load(options['input_path']+'multi_srm/roi_location.npz')
+		loc = ws[roi]
+		del ws
+		
+
 	# extract datasets we want to use
 	data = []
 	for d in range(len(ds)):
@@ -117,31 +130,40 @@ def run_expt(nfeature,initseed,expopt,num_train,loo_flag,model,roi,ds):
 			else:
 				data_align.append(ut.zscore_data_all(data[d]))
 				data_pred.append(None)
+
 		# alignment
 		if model not in ['avg']:
 			# alignment
 			# S is the transformed alignment data from training subjects
-			W,S = align.align(data_align,train_mb,niter,nfeature,initseed)
+			if model in ['multi_srm']:
+				W,S,noise = align.align(data_align,train_mb,niter,nfeature,initseed,model)
+			elif model in ['all_dict','indv_dict']:
+				W_grp,W,S= align.align(data_align,train_mb,niter,nfeature,initseed,model,loc)
+			else:
+				W,S = align.align(data_align,train_mb,niter,nfeature,initseed,model)
 			# learn W_all, loo, and transform prediction data into shared space
-			W_all = []
+			# W_all = []
 			transformed_pred = []
 			loo = []
 			for d in range(ndata):
 				if d == pd:
-					W_tmp,loo_tmp = ut.learn_W(data_align,S,W,train_mb,test_mb,d,model)
-					transformed_pred.append(ut.transform(data_pred[d],W_tmp))
-					W_all.append(W_tmp)
+					if model in ['all_dict','indv_dict']:
+						W_tmp,loo_tmp = ut.learn_W(data_align,S,W,train_mb,test_mb,d,model,W_grp)
+					else:
+						W_tmp,loo_tmp = ut.learn_W(data_align,S,W,train_mb,test_mb,d,model)
+					transformed_pred.append(ut.transform(data_pred[d],W_tmp,model))
+					# W_all.append(W_tmp)
 					loo.append(loo_tmp)
 				else:
 					transformed_pred.append(None)
-					W_all.append(None)
+					# W_all.append(None)
 					loo.append(None)
 			# # save W
 			# if not os.path.exists(options['output_path']+'W/mysseg_all/'+model+'/'):
 			# 	os.makedirs(options['output_path']+'W/mysseg_all/'+model+'/')
 			# with open(options['output_path']+'W/mysseg_all/'+model+'/'+'{}_feat{}_ntrain{}_rand{}_{}_ds{}.pickle'.format(roi,nfeature,num_train,initseed,expopt,ds),'wb') as fid:
 			# 	pickle.dump(W_all,fid,pickle.HIGHEST_PROTOCOL)
-			del W_all
+			# del W_all
 			del S
 		else:
 			# average alignment data of training subjects as transformed alignment data

@@ -7,7 +7,10 @@
 #SBATCH -J 'multi_srm'
 #SBATCH --ntasks-per-node=1
 #SBATCH -o slurm-%j.out
-#SBATCH -t 300
+#SBATCH --mail-type=fail
+#SBATCH --mail-user=hejiaz@princeton.edu
+#SBATCH -t 150
 
 ./run_exp_all.py $1 $2 $3
 
+###--mem=65536

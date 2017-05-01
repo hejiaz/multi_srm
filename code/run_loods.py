@@ -72,12 +72,12 @@ def run_expt(nfeature,initseed,roi,loo_ds,other_ds):
 		for i in range(d+1):
 			data.append(data_tmp[other_ds[i]])
 		# alignment
-		W,_ = align.align(data,sub_mb,niter,nfeature,initseed)
+		W,_,_ = align.align(data,sub_mb,niter,nfeature,initseed,model)
 		# extract W_loo: W of shared subjects
 		idx_all = ut.map_ds_subject_idx_to_global(membership,other_ds[0],idx_base,other_ds[:d+1])
 		W_loo = W[:,:,idx_all]
 		# transform shared subjects in left-out dataset into shared space
-		transformed_pred = ut.transform(data_test,W_loo)
+		transformed_pred = ut.transform(data_test,W_loo,model)
 		# experiment
 		accu.append(pred.predict(transformed_pred))
 		print ('accu'+str(d)+': '+str(np.mean(accu[d])))

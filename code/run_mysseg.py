@@ -134,7 +134,7 @@ def run_expt(nfeature,initseed,expopt,num_train,loo_flag,model,roi,ds):
 			W,S = align.align(data_align,train_mb,niter,nfeature,initseed,model)
 			# print (noise)
 		# learn W_all, loo, and transform prediction data into shared space
-		W_all = []
+		# W_all = []
 		transformed_pred = []
 		loo = []
 		for d in range(ndata):
@@ -143,14 +143,14 @@ def run_expt(nfeature,initseed,expopt,num_train,loo_flag,model,roi,ds):
 			else:
 				W_tmp,loo_tmp = ut.learn_W(data_align,S,W,train_mb,test_mb,d,model)
 			transformed_pred.append(ut.transform(data_pred[d],W_tmp,model))
-			W_all.append(W_tmp)
+			# W_all.append(W_tmp)
 			loo.append(loo_tmp)
 		# # save W
 		# if not os.path.exists(options['output_path']+'W/mysseg/'+model+'/'):
 		# 	os.makedirs(options['output_path']+'W/mysseg/'+model+'/')
 		# with open(options['output_path']+'W/mysseg/'+model+'/'+'{}_feat{}_ntrain{}_rand{}_{}_ds{}.pickle'.format(roi,nfeature,num_train,initseed,expopt,ds),'wb') as fid:
 		# 	pickle.dump(W_all,fid,pickle.HIGHEST_PROTOCOL)
-		del W_all
+		# del W_all
 		del S
 	else:
 		# average alignment data of training subjects as transformed alignment data
