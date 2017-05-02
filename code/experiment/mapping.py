@@ -73,7 +73,7 @@ def predict_loo(transformed_data,word_tst,W_ft,tst_subj,num_chunks,num_previous)
     FT_rank_score = np.zeros((ndata),dtype=np.float32) 
     for d in range(ndata):
         # add previous time steps
-        fmri_tst = add_prev_time_steps(transformed_avg[d], num_previous)       
+        fmri_tst = add_prev_time_steps(transformed_avg[d], num_previous)     
         # comparisons in Semantic space (i.e. fMRI -> text) (procrustes)
         FT_prediction = fast_dot(W_ft, fmri_tst)
         FT_classification_score[d] = scene_classification(word_tst[d], FT_prediction, num_chunks[d])

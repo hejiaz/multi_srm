@@ -34,6 +34,15 @@ script='run_exp.sh'
 # 	done
 # done
 
+# mapping_all
+for rand in 0 1 3 5 6
+do
+	for model in 'multi_srm' 'all_srm' 'all_ica' 'all_gica' 'all_dict' 'avg'
+	do
+		sbatch $script 'mapping_all' $model $rand
+	done
+done
+
 # # mapping_loo
 # for rand in 0 1 2 3 4
 # do

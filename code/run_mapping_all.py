@@ -1,6 +1,6 @@
 #!/usr/bin/env python
-# Run fMRI to word embedding experiment using multi-dataset SRM. Learn a global linear mapping for data from 
-# all datasets. Half of the movie and word embedding as alignment data, and the other half as testing
+# Run fMRI to word embedding experiment using multi-dataset SRM. Use data from all datasets to learn a global linear mapping
+# Half of the movie and word embedding as alignment data, and the other half as testing. Can use all TRs from all datasets except for the prediction dataset
 # By Hejia Zhang @ Princeton
 
 import numpy as np
@@ -13,12 +13,11 @@ import random
 import sys, os
 sys.path.insert(0, os.path.abspath('..'))
 
-# use ds to train, use word_ds to test. Only word_ds has text embeddings
-
-def run_expt(nfeature,initseed,expopt,num_train,loo_flag,model,roi,ds):
+# use ds to train, use word_ds to learn text mapping. Only word_ds has text embeddings. Test on dataset tst_ds
+def run_expt(nfeature,initseed,expopt,num_train,loo_flag,model,roi,ds,tst_ds):
 	# parameters
 	expt = 'mapping'
-	niter = 50
+	niter = 5
 	num_previous = 8
 	word_dim = 300
 	word_ds = [0,1,2,3]
@@ -45,6 +44,7 @@ def run_expt(nfeature,initseed,expopt,num_train,loo_flag,model,roi,ds):
 		raise Exception('not valid model')
 		
 	pred = importlib.import_module('experiment.'+expt)
+	pred_loo = importlib.import_module('experiment.'+expt+'_loo')
 
 	# load path
 	# setting = open('setting.yaml')
@@ -70,6 +70,8 @@ def run_expt(nfeature,initseed,expopt,num_train,loo_flag,model,roi,ds):
 	new_ds = []
 	for w in word_ds:
 		new_ds.append(ds.index(w))
+
+	tst_new = ds.index(tst_ds)
 
 	# separate training and testing subjects
 	if not loo_flag:
@@ -114,31 +116,33 @@ def run_expt(nfeature,initseed,expopt,num_train,loo_flag,model,roi,ds):
 	TR_1st = []
 	for d in range(ndata):
 		TR_1st.append(int(data[d].shape[1]/2))
-	data_1st = []
-	data_2nd = []
-	word_1st = []
-	word_2nd = []
-	for d in range(ndata):
-		data_1st.append(ut.zscore_data_all(data[d][:,:TR_1st[d],:]))
-		data_2nd.append(ut.zscore_data_all(data[d][:,TR_1st[d]:,:]))
-		if word[d] is None:
-			word_1st.append([])
-			word_2nd.append([])
+
+	data_align = []
+	data_pred = []
+	word_align = []
+	word_pred = []
+	for d,ds_idx in enumerate(ds):
+		if ds_idx == tst_ds:
+			if expopt == '1st':
+				data_align.append(ut.zscore_data_all(data[d][:,TR_1st[d]:,:]))
+				data_pred.append(ut.zscore_data_all(data[d][:,:TR_1st[d],:]))
+				word_align.append(word[d][:,TR_1st[d]:])
+				word_pred.append(word[d][:,:TR_1st[d]])
+			elif expopt == '2nd':
+				data_align.append(ut.zscore_data_all(data[d][:,:TR_1st[d],:]))
+				data_pred.append(ut.zscore_data_all(data[d][:,TR_1st[d]:,:]))
+				word_align.append(word[d][:,:TR_1st[d]])
+				word_pred.append(word[d][:,TR_1st[d]:])
+			else:
+				raise Exception('expopt has to be 1st or 2nd')
 		else:
-			word_1st.append(word[d][:,:TR_1st[d]])
-			word_2nd.append(word[d][:,TR_1st[d]:])
-	if expopt == '1st':
-		data_align = data_2nd
-		data_pred = data_1st
-		word_align = word_2nd
-		word_pred = word_1st
-	elif expopt == '2nd':
-		data_align = data_1st
-		data_pred = data_2nd
-		word_align = word_1st
-		word_pred = word_2nd
-	else:
-		raise Exception('expopt has to be 1st or 2nd')
+			data_align.append(ut.zscore_data_all(data[d]))
+			data_pred.append(None)
+			if word[d] is None:
+				word_align.append(None)
+			else:
+				word_align.append(word[d])
+			word_pred.append(None)
 	del data
 	del word
 
@@ -153,23 +157,19 @@ def run_expt(nfeature,initseed,expopt,num_train,loo_flag,model,roi,ds):
 		else:
 			W,S = align.align(data_align,train_mb,niter,nfeature,initseed,model)
 		# learn W_all, loo, and transform prediction data into shared space
-		# W_all = []
 		transformed_pred = []
 		loo = []
-		for d in range(ndata):
-			if model in ['all_dict','indv_dict']:
-				W_tmp,loo_tmp = ut.learn_W(data_align,S,W,train_mb,test_mb,d,model,W_grp)
+		for d,ds_idx in enumerate(ds):
+			if ds_idx == tst_ds:
+				if model in ['all_dict','indv_dict']:
+					W_tmp,loo_tmp = ut.learn_W(data_align,S,W,train_mb,test_mb,d,model,W_grp)
+				else:
+					W_tmp,loo_tmp = ut.learn_W(data_align,S,W,train_mb,test_mb,d,model)
+				transformed_pred.append(ut.transform(data_pred[d],W_tmp,model))
+				loo.append(loo_tmp)
 			else:
-				W_tmp,loo_tmp = ut.learn_W(data_align,S,W,train_mb,test_mb,d,model)
-			transformed_pred.append(ut.transform(data_pred[d],W_tmp,model))
-			# W_all.append(W_tmp)
-			loo.append(loo_tmp)
-		# # save W
-		# if not os.path.exists(options['output_path']+'W/'+pre+'mapping{}/'.format(word_dim)+model+'/'):
-		# 	os.makedirs(options['output_path']+'W/'+pre+'mapping{}/'.format(word_dim)+model+'/')
-		# with open(options['output_path']+'W/'+pre+'mapping{}/'+model+'/'+'{}_feat{}_ntrain{}_rand{}_{}_ds{}.pickle'.format(word_dim,roi,nfeature,num_train,initseed,expopt,ds),'wb') as fid:
-		# 	pickle.dump(W_all,fid,pickle.HIGHEST_PROTOCOL)
-		# del W_all
+				transformed_pred.append(None)
+				loo.append(None)
 	else:
 		# average alignment data of training subjects as transformed alignment data
 		S = []
@@ -185,21 +185,21 @@ def run_expt(nfeature,initseed,expopt,num_train,loo_flag,model,roi,ds):
 	# 1) concatenated transformed alignment data from training subjects
 	# 2) word embeddings for alignment data
 	# process word embeddings
-	word_align_all,word_pred_all = pred.process_semantic_all([word_align[n] for n in new_ds],[word_pred[n] for n in new_ds],num_previous)
+	word_align_all,word_pred_all = pred_loo.process_semantic([word_align[n] for n in new_ds],word_pred[tst_new],num_previous)
 	W_ft = pred.learn_linear_map([S[n] for n in new_ds],word_align_all,num_previous)
 
 	print ('run experiment')
 	if loo_flag:
-		accu_class,accu_rank = pred.predict_loo([transformed_pred[n] for n in new_ds],word_pred_all,W_ft,[loo[n] for n in new_ds],num_chunks,num_previous)
+		accu_class,accu_rank = pred.predict_loo([transformed_pred[tst_new]],[word_pred_all],W_ft,[loo[tst_new]],[num_chunks[tst_ds]],num_previous)
 	else:
-		accu_class,accu_rank = pred.predict([transformed_pred[n] for n in new_ds],word_pred_all,W_ft,num_chunks,num_previous)
+		accu_class,accu_rank = pred.predict([transformed_pred[tst_new]],[word_pred_all],W_ft,[num_chunks[tst_ds]],num_previous)
 
 	print ('results:')
 	print ('accu_class: '+str(accu_class))
 	print ('accu_rank: '+str(accu_rank))
 	# save results
-	if not os.path.exists(options['output_path']+'accu/mapping/'+model+'/'):
-		os.makedirs(options['output_path']+'accu/mapping/'+model+'/')
-	np.savez_compressed(options['output_path']+'accu/mapping/'+model+'/{}_feat{}_rand{}_{}_ds{}.npz'.format(roi,nfeature,initseed,expopt,ds),accu_class=accu_class,accu_rank=accu_rank)
+	if not os.path.exists(options['output_path']+'accu/mapping_all/'+model+'/'):
+		os.makedirs(options['output_path']+'accu/mapping_all/'+model+'/')
+	np.savez_compressed(options['output_path']+'accu/mapping_all/'+model+'/{}_feat{}_rand{}_{}_ds{}_tst{}.npz'.format(roi,nfeature,initseed,expopt,ds,tst_ds),accu_class=accu_class,accu_rank=accu_rank)
 
 

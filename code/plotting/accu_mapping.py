@@ -44,6 +44,38 @@ for m,roi in enumerate(roi_all):
     print (op)
 	
 
+# mapping_all (average across subjects in each dataset)
+in_path = options['output_path']+'accu/mapping_all/{}/{}_feat{}_rand{}_{}_ds{}_tst{}.npz'
+out_path = options['output_path']+'accu_bar/mapping_all/{}/' # {} is roi
+
+tst_ds = [3]
+ds = [0,1,2,3]
+rand = [0,1,3,5,6]
+expopt_all = ['1st','2nd']
+
+for m,roi in enumerate(roi_all):
+    op = out_path.format(roi)
+    if not os.path.exists(op):
+        os.makedirs(op) 
+    for model in model_all:
+        nfeat = feat_dict[model]
+        for tst in tst_ds:
+            accu_class_all = np.zeros((len(rand)),dtype=np.float32)
+            accu_rank_all = np.zeros((len(rand)),dtype=np.float32)
+            for r,initseed in enumerate(rand):
+                for expopt in expopt_all:
+                    ws = np.load(in_path.format(model,roi,nfeat[m],initseed,expopt,ds,tst))
+                    accu_class_all[r] += ws['accu_class'][0]/2
+                    accu_rank_all[r] += ws['accu_rank'][0]/2
+
+            class_mean = np.mean(accu_class_all)
+            class_se = stats.sem(accu_class_all)
+            rank_mean = np.mean(accu_rank_all)
+            rank_se = stats.sem(accu_rank_all)
+ 
+            np.savez_compressed(op+model+'_ds'+str(tst)+'.npz',class_mean=class_mean,class_se=class_se,rank_mean=rank_mean,rank_se=rank_se)
+    print (op)
+
 # mapping_loo (accuracy per subject in the left-out dataset (all subjects in that dataset, not just shared ones))
 in_path = options['output_path']+'accu/mapping_loo/{}/{}_feat{}_rand{}_loods{}.npz'
 out_path = options['output_path']+'accu_bar/mapping_loo/{}/' # {} is roi

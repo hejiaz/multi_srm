@@ -36,6 +36,9 @@ if args.expt in ['loods']:
 if args.expt in ['overfit']:
 	ds_all = [[0,1],[0,2],[0,3],[1,3]]
 
+if args.expt in ['mapping_all']:
+	tst_ds_all = [3]
+
 # import experiment 
 run = importlib.import_module('run_'+args.expt)
 
@@ -57,6 +60,13 @@ elif args.expt in ['mapping_loo']:
 	for loo_ds in loo_ds_all:
 		for roi,nfeat in zip(['dmn','pt','eac'],feat_dict[args.model]):
 			run.run_expt(nfeat,args.rand,args.model,roi,loo_ds)
+
+elif args.expt in ['mapping_all']:
+	feat_dict = {'multi_srm':[200,50,150],'all_srm':[50,125,50],'all_ica':[25,25,25],'all_gica':[75,50,75],'all_dict':[200,150,75],'avg':[50,50,50]}
+	for tst_ds in tst_ds_all:
+		for expopt in expopt_all:
+			for roi,nfeat in zip(['dmn','pt','eac'],feat_dict[args.model]):
+				run.run_expt(nfeat,args.rand,expopt,num_train,loo_flag,args.model,roi,ds,tst_ds)
 
 elif args.expt in ['loods']:
 	feat_dict = {'multi_srm':[75,75,100],'all_srm':[75,75,50],'indv_srm':[75,75,50],'all_ica':[50,25,25],'indv_ica':[50,25,25],\
