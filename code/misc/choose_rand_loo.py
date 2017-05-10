@@ -7,17 +7,19 @@
 
 import numpy as np
 import yaml
+import sys, os
+sys.path.insert(0, os.path.abspath('..'))
 import utils as ut
 import random
 
 # parameters
 min_test = 3
-num_train = 40
-ds = [0,1,2,3] # which datasets to use: greeneye,milky,vodka,sherlock
+num_train = 65
+ds = list(range(12)) # which datasets to use: greeneye,milky,vodka,sherlock, plus 8 small datasets (12 in total)
 max_rand = 30
 
 # load membership info
-setting = open('setting.yaml')
+setting = open('../setting.yaml')
 options = yaml.safe_load(setting)
 ws = np.load(options['input_path']+'multi_srm/membership.npz')
 membership = ws['membership']

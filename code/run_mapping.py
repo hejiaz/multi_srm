@@ -1,6 +1,7 @@
 #!/usr/bin/env python
-# Run fMRI to word embedding experiment using multi-dataset SRM. Learn a global linear mapping for data from 
-# all datasets. Half of the movie and word embedding as alignment data, and the other half as testing
+# Run fMRI to word embedding experiment using multi-dataset SRM. Learn a linear mapping for data from 
+# one datasets. Half of the movie and word embedding as alignment data, and the other half as testing. 
+# Like in mysseg
 # By Hejia Zhang @ Princeton
 
 import numpy as np
@@ -13,17 +14,20 @@ import random
 import sys, os
 sys.path.insert(0, os.path.abspath('..'))
 
-# use ds to train, use word_ds to test. Only word_ds has text embeddings
 
 def run_expt(nfeature,initseed,expopt,num_train,loo_flag,model,roi,ds):
 	# parameters
 	expt = 'mapping'
-	niter = 50
-	num_previous = 8
+	if model in ['multi_dict','indv_dict']:
+		niter = 30
+	else:
+		niter = 50
+	num_previous = 5
 	word_dim = 300
-	word_ds = [0,1,2,3]
 	num_chunks = [7,4,4,25] # different number of scenes for different datasets, make sure the scene length is not too short
 	pre = ''
+	# ds must start with whole wd_ds
+	wd_ds = [0,1,2,3] #datasets with word-embedding information
 
 	print (model)
 	print (roi)
@@ -35,7 +39,7 @@ def run_expt(nfeature,initseed,expopt,num_train,loo_flag,model,roi,ds):
 		align = importlib.import_module('model.ica')
 	elif model in ['all_gica','indv_gica']:
 		align = importlib.import_module('model.gica')
-	elif model in ['all_dict','indv_dict']:
+	elif model in ['multi_dict','indv_dict']:
 		align = importlib.import_module('model.dictlearn')		
 	elif model in ['multi_srm']:
 		align = importlib.import_module('model.'+model)
@@ -47,12 +51,14 @@ def run_expt(nfeature,initseed,expopt,num_train,loo_flag,model,roi,ds):
 	pred = importlib.import_module('experiment.'+expt)
 
 	# load path
-	# setting = open('setting.yaml')
-	setting = open('../setting.yaml')
+	try:
+		setting = open('setting.yaml')
+	except:
+		setting = open('../setting.yaml')
 	options = yaml.safe_load(setting)
 
 	# load location information for dictionary learning
-	if model in ['all_dict','indv_dict']:
+	if model in ['multi_dict','indv_dict']:
 		ws = np.load(options['input_path']+'multi_srm/roi_location.npz')
 		loc = ws[roi]
 		del ws
@@ -65,11 +71,6 @@ def run_expt(nfeature,initseed,expopt,num_train,loo_flag,model,roi,ds):
 	membership = membership[:,ds]
 	membership = ut.remove_invalid_membership(membership)
 	nsubjs,ndata = membership.shape
-
-	# find position of word_ds in ds
-	new_ds = []
-	for w in word_ds:
-		new_ds.append(ds.index(w))
 
 	# separate training and testing subjects
 	if not loo_flag:
@@ -106,7 +107,8 @@ def run_expt(nfeature,initseed,expopt,num_train,loo_flag,model,roi,ds):
 	word = []
 	for d in range(len(ds)):
 		data.append(data_tmp[ds[d]])
-		word.append(word_tmp[ds[d]])
+		if d in wd_ds:
+			word.append(word_tmp[ds[d]])
 	del data_tmp
 	del word_tmp
 
@@ -118,15 +120,16 @@ def run_expt(nfeature,initseed,expopt,num_train,loo_flag,model,roi,ds):
 	data_2nd = []
 	word_1st = []
 	word_2nd = []
+
 	for d in range(ndata):
-		data_1st.append(ut.zscore_data_all(data[d][:,:TR_1st[d],:]))
-		data_2nd.append(ut.zscore_data_all(data[d][:,TR_1st[d]:,:]))
-		if word[d] is None:
-			word_1st.append([])
-			word_2nd.append([])
-		else:
+		if d in wd_ds:
 			word_1st.append(word[d][:,:TR_1st[d]])
 			word_2nd.append(word[d][:,TR_1st[d]:])
+			data_1st.append(ut.zscore_data_all(data[d][:,:TR_1st[d],:]))
+			data_2nd.append(ut.zscore_data_all(data[d][:,TR_1st[d]:,:]))
+		else:
+			data_1st.append(ut.zscore_data_all(data[d]))
+			data_2nd.append(ut.zscore_data_all(data[d]))
 	if expopt == '1st':
 		data_align = data_2nd
 		data_pred = data_1st
@@ -138,7 +141,8 @@ def run_expt(nfeature,initseed,expopt,num_train,loo_flag,model,roi,ds):
 		word_align = word_1st
 		word_pred = word_2nd
 	else:
-		raise Exception('expopt has to be 1st or 2nd')
+		raise Exception('expopt has to be 1st or 2nd')		
+
 	del data
 	del word
 
@@ -148,51 +152,47 @@ def run_expt(nfeature,initseed,expopt,num_train,loo_flag,model,roi,ds):
 		# S is the transformed alignment data from training subjects
 		if model in ['multi_srm']:
 			W,S,noise = align.align(data_align,train_mb,niter,nfeature,initseed,model)
-		elif model in ['all_dict','indv_dict']:
+		elif model in ['multi_dict','indv_dict']:
 			W_grp,W,S= align.align(data_align,train_mb,niter,nfeature,initseed,model,loc)
 		else:
 			W,S = align.align(data_align,train_mb,niter,nfeature,initseed,model)
 		# learn W_all, loo, and transform prediction data into shared space
-		# W_all = []
 		transformed_pred = []
 		loo = []
-		for d in range(ndata):
-			if model in ['all_dict','indv_dict']:
+		for d in wd_ds:
+			if model in ['multi_dict','indv_dict']:
 				W_tmp,loo_tmp = ut.learn_W(data_align,S,W,train_mb,test_mb,d,model,W_grp)
 			else:
 				W_tmp,loo_tmp = ut.learn_W(data_align,S,W,train_mb,test_mb,d,model)
-			transformed_pred.append(ut.transform(data_pred[d],W_tmp,model))
-			# W_all.append(W_tmp)
 			loo.append(loo_tmp)
-		# # save W
-		# if not os.path.exists(options['output_path']+'W/'+pre+'mapping{}/'.format(word_dim)+model+'/'):
-		# 	os.makedirs(options['output_path']+'W/'+pre+'mapping{}/'.format(word_dim)+model+'/')
-		# with open(options['output_path']+'W/'+pre+'mapping{}/'+model+'/'+'{}_feat{}_ntrain{}_rand{}_{}_ds{}.pickle'.format(word_dim,roi,nfeature,num_train,initseed,expopt,ds),'wb') as fid:
-		# 	pickle.dump(W_all,fid,pickle.HIGHEST_PROTOCOL)
-		# del W_all
+			transformed_pred.append(ut.transform(data_pred[d],W_tmp,model))
 	else:
 		# average alignment data of training subjects as transformed alignment data
 		S = []
 		loo = []
-		for d in range(ndata):
-			train_subj,test_subj = ut.find_train_test_subj(train_mb,test_mb,d)
+		transformed_pred = []
+		for d in wd_ds:
+			train_subj,loo_tmp = ut.find_train_test_subj(train_mb,test_mb,d)
+			loo.append(loo_tmp)
 			S.append(np.mean(data_align[d][:,:,train_subj],axis=2))
-			loo.append(test_subj)
-		transformed_pred = data_pred
+			transformed_pred.append(data_pred[d])
 
-	print ('learn linear mapping')
+	print ('run experiment')
 	# learn linear mapping using:
 	# 1) concatenated transformed alignment data from training subjects
 	# 2) word embeddings for alignment data
 	# process word embeddings
-	word_align_all,word_pred_all = pred.process_semantic_all([word_align[n] for n in new_ds],[word_pred[n] for n in new_ds],num_previous)
-	W_ft = pred.learn_linear_map([S[n] for n in new_ds],word_align_all,num_previous)
+	word_align_all,word_pred_all = pred.process_semantic_all(word_align,word_pred,num_previous)
+	W_ft = pred.learn_linear_map([S[n] for n in wd_ds],word_align_all,num_previous)		
 
-	print ('run experiment')
-	if loo_flag:
-		accu_class,accu_rank = pred.predict_loo([transformed_pred[n] for n in new_ds],word_pred_all,W_ft,[loo[n] for n in new_ds],num_chunks,num_previous)
-	else:
-		accu_class,accu_rank = pred.predict([transformed_pred[n] for n in new_ds],word_pred_all,W_ft,num_chunks,num_previous)
+	# run experiment
+	accu_class = np.zeros((len(wd_ds)),dtype=np.float32)
+	accu_rank = np.zeros((len(wd_ds)),dtype=np.float32)
+	for d in wd_ds:
+		if loo_flag:
+			accu_class[d],accu_rank[d] = pred.predict_loo(transformed_pred[d],word_pred_all[d],W_ft,loo[d],num_chunks[d],num_previous)
+		else:
+			accu_class[d],accu_rank[d] = pred.predict(transformed_pred[d],word_pred_all[d],W_ft,num_chunks[d],num_previous)
 
 	print ('results:')
 	print ('accu_class: '+str(accu_class))

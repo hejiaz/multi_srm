@@ -48,7 +48,7 @@ def align(data, membership, niter, nfeature, initseed, model):
 
     W_raw = []
     S_raw = []
-    for d in range(ndata):
+    for d in range(min([ndata,4])):
         # Aggregate data in the same dataset
         bY = np.zeros((nvoxel,nTR[d],subj_data[d]),dtype=np.float32)
         m_d = 0
@@ -85,32 +85,35 @@ def align(data, membership, niter, nfeature, initseed, model):
         W_raw.append(Wi)
         S_raw.append(ES)
 
-
+    for d in range(4,ndata):
+        W_raw.append([])
+        S_raw.append([])
+        
     if model == 'indv_gica':
         return W_raw, S_raw
 
-    elif model == 'all_gica':
-        # rotation
-        # use first dataset as base
-        W_link = W_raw[0]
-        info_link = info_list[0][:,0]
-        # datasets that are not yet aligned
-        not_linked = deque(range(1,ndata))
-        while not_linked:
-            # find shared subjects between the aligned part and first dataset that is not aligned
-            shared,_,diff2 = find_shared(info_link,info_list[not_linked[0]][:,0])
-            # if there is no shared subject between them, put this dataset to the end
-            if not list(shared):
-                not_linked.rotate(-1)
-                continue
-            else:
-                R,W_link,info_link = find_rotation(W_link,W_raw[not_linked[0]],shared,diff2,info_link)
-                # rotate W_raw and S_raw
-                S_raw[not_linked[0]] = fast_dot(R,S_raw[not_linked[0]])
-                not_linked.popleft()    
-        # reorder
-        W = W_link[:,:,info_link.argsort()]   
-        return W, S_raw
+    # elif model == 'all_gica':
+    #     # rotation
+    #     # use first dataset as base
+    #     W_link = W_raw[0]
+    #     info_link = info_list[0][:,0]
+    #     # datasets that are not yet aligned
+    #     not_linked = deque(range(1,ndata))
+    #     while not_linked:
+    #         # find shared subjects between the aligned part and first dataset that is not aligned
+    #         shared,_,diff2 = find_shared(info_link,info_list[not_linked[0]][:,0])
+    #         # if there is no shared subject between them, put this dataset to the end
+    #         if not list(shared):
+    #             not_linked.rotate(-1)
+    #             continue
+    #         else:
+    #             R,W_link,info_link = find_rotation(W_link,W_raw[not_linked[0]],shared,diff2,info_link)
+    #             # rotate W_raw and S_raw
+    #             S_raw[not_linked[0]] = fast_dot(R,S_raw[not_linked[0]])
+    #             not_linked.popleft()    
+    #     # reorder
+    #     W = W_link[:,:,info_link.argsort()]   
+    #     return W, S_raw
     else:
         raise Exception('invalid model')
 

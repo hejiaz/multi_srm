@@ -6,6 +6,7 @@ import numpy as np
 import scipy,copy
 from collections import deque
 from sklearn.utils.extmath import fast_dot
+import random
 
 # arguments:
 # data: a list of 3d arrays (voxel x time x # all subjects), each array contains data from a single dataset. 
@@ -56,8 +57,16 @@ def align(data, membership, niter, nfeature, initseed, model):
     data = data_new
 
     W_raw = []
-    S_raw = []    
-    for d in range(ndata):
+    S_raw = []   
+
+    if model == 'indv_srm':
+        effective = min([ndata,4])
+    elif model == 'all_srm':
+        effective = ndata
+    else:
+        raise Exception('invalid model')
+
+    for d in range(effective):
         w = []
         if initseed is not None:
             np.random.seed(initseed)
@@ -140,32 +149,46 @@ def align(data, membership, niter, nfeature, initseed, model):
         W_raw.append(W_tmp)
         S_raw.append(shared_response)
 
-    # rotation
-    # use first dataset as base
-    W_link = copy.copy(W_raw[0])
-    info_link = info_list[0][:,0]
-    # datasets that are not yet aligned
-    not_linked = deque(range(1,ndata))
-    while not_linked:
-        # find shared subjects between the aligned part and first dataset that is not aligned
-        shared,_,diff2 = find_shared(info_link,info_list[not_linked[0]][:,0])
-        # if there is no shared subject between them, put this dataset to the end
-        if not list(shared):
-            not_linked.rotate(-1)
-            continue
-        else:
-            R,W_link,info_link = find_rotation(W_link,W_raw[not_linked[0]],shared,diff2,info_link)
-            # rotate W_raw and S_raw
-            S_raw[not_linked[0]] = fast_dot(R,S_raw[not_linked[0]])
-            for m in range(ds_subj[not_linked[0]]):
-                W_raw[not_linked[0]][:,:,m] = fast_dot(W_raw[not_linked[0]][:,:,m],R.T)
-            not_linked.popleft()    
-    # reorder
-    W = W_link[:,:,info_link.argsort()]
+    if model == 'indv_srm':
+        for d in range(4,ndata):
+            W_raw.append([])
+            S_raw.append([])
 
+    # break the same initialization using a random rotation
+    for d in range(effective):
+        A = np.random.rand(nfeature,nfeature).astype(np.float32)
+        Q, _ = np.linalg.qr(A)
+        S_raw[d] = fast_dot(Q,S_raw[d])
+        for m in range(subj_data[d]):
+            W_raw[d][:,:,m] = fast_dot(W_raw[d][:,:,m],Q.T)
+            
     if model == 'indv_srm':
         return W_raw, S_raw
+
     elif model == 'all_srm':
+        # rotation
+        # use first dataset as base
+        W_link = copy.copy(W_raw[0])
+        info_link = info_list[0][:,0]
+        # datasets that are not yet aligned
+        not_linked = deque(range(1,ndata))
+        while not_linked:
+            # find shared subjects between the aligned part and first dataset that is not aligned
+            shared,_,diff2 = find_shared(info_link,info_list[not_linked[0]][:,0])
+            # if there is no shared subject between them, put this dataset to the end
+            if not list(shared):
+                not_linked.rotate(-1)
+                continue
+            else:
+                R,W_link,info_link = find_rotation(W_link,W_raw[not_linked[0]],shared,diff2,info_link)
+                # rotate W_raw and S_raw
+                S_raw[not_linked[0]] = fast_dot(R,S_raw[not_linked[0]])
+                for m in range(ds_subj[not_linked[0]]):
+                    W_raw[not_linked[0]][:,:,m] = fast_dot(W_raw[not_linked[0]][:,:,m],R.T)
+                not_linked.popleft()    
+        # reorder
+        W = W_link[:,:,info_link.argsort()]
+
         return W, S_raw
     else:
         raise Exception('invalid model')

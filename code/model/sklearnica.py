@@ -49,7 +49,7 @@ def _sym_decorrelation(W):
     s, u = linalg.eigh(fast_dot(W, W.T))
     # u (resp. s) contains the eigenvectors (resp. square roots of
     # the eigenvalues) of W * W.T
-    return np.nan_to_num(fast_dot(fast_dot(u * (1. / np.sqrt(s)), u.T), W))
+    return np.nan_to_num(fast_dot(fast_dot(u * np.nan_to_num(1. / np.sqrt(s)), u.T), W))
 
 
 def _ica_def(X, tol, g, fun_args, max_iter, w_init):

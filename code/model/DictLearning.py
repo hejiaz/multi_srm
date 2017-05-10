@@ -1,5 +1,3 @@
-#!/usr/bin/env python
-
 #  Copyright 2016 Intel Corporation
 #
 #  Licensed under the Apache License, Version 2.0 (the "License");
@@ -25,7 +23,6 @@ The implementation is based on the following publication:
 
 # Authors: Javier Turek (Intel Labs), 2017
 
-
 import numpy as np
 import scipy
 import scipy.sparse
@@ -34,6 +31,8 @@ from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.utils import assert_all_finite
 from sklearn.utils.validation import NotFittedError
 from sklearn.utils.extmath import fast_dot
+from skimage.restoration import denoise_tv_bregman
+from lightning.regression import FistaRegressor
 
 class MSDL(BaseEstimator, TransformerMixin):
     """Multi-subject Dictionary Learning
@@ -85,7 +84,7 @@ class MSDL(BaseEstimator, TransformerMixin):
     """
 
     def __init__(self, n_iter=10, factors=10, rand_seed=0, mu=1.0, lam=1.0,
-                 kappa=0.5, fista_iter=20):
+                 kappa=0.5, fista_iter=20, method='tvl1'):
         self.n_iter = n_iter
         self.factors = factors
         self.rand_seed = rand_seed
@@ -93,6 +92,7 @@ class MSDL(BaseEstimator, TransformerMixin):
         self.lam = lam
         self.fista_iter = fista_iter
         self.kappa = kappa
+        self.method = method
         return
 
     def fit(self, X, y=None, R=None):
@@ -107,46 +107,9 @@ class MSDL(BaseEstimator, TransformerMixin):
             of fMRI data of all subjects.
         """
 
-        # # Check the number of subjects
-        # if len(X) <= 1:
-        #     raise ValueError("There are not enough subjects "
-        #                      "({0:d}) to train the model.".format(len(X)))
-
-        # # Check for input data sizes
-        # if X[0].shape[1] < self.factors:
-        #     raise ValueError(
-        #         "There are not enough samples to train the model with "
-        #         "{0:d} features.".format(self.factors))
-
-        # # Check if all subjects have same number of voxels
-        # number_voxels = X[0].shape[0]
-        # number_subjects = len(X)
-        # for subject in range(number_subjects):
-        #     assert_all_finite(X[subject])
-        #     if X[subject].shape[0] != number_voxels:
-        #         raise ValueError("Different number of voxels between subjects"
-        #                          ".")
-
-        # # Check that we have the position for each voxel
-        # if R is None:
-        #     raise TypeError("Cannot find parameter R.")
-        # if R.shape[0] != number_voxels:
-        #     raise ValueError("Wrong number of voxels in R ({0:d})."
-        #                      .format(len(X)))
-
-        # if self.kappa < 0.0 or self.kappa >= 1.0:
-        #     raise ValueError("Kappa should be in range (0,1).")
-
-        # if self.lam <= 0.0 or self.mu <= 0.0:
-        #     raise ValueError("Lambda and Mu regularization parameters should "
-        #                      "positive.")
-
-        # Prepare the laplacian operator for this data
-        self.L_ = self._create_laplacian_operator(R)
-        self.max_eigval_L_ = \
-            scipy.sparse.linalg.svds(self.L_, k=1, which='LM',
-                                     return_singular_vectors=False)
-        self.max_eigval_L_ = (self.max_eigval_L_[0]**2)
+        if self.method == 'tvl1':
+            self._build_3d_v(R)
+            self.weight = 2*self.mu/self.lam
 
         # Run MSDL
         self.Us_, self.Vs_, self.V_ = self._msdl(X)
@@ -166,87 +129,39 @@ class MSDL(BaseEstimator, TransformerMixin):
             Loadings for each subject new given data.
         """
 
-        # # Check if the model exist
-        # if hasattr(self, 'Vs_') is False:
-        #     raise NotFittedError("The model fit has not been run yet.")
-
-        # # Check the number of subjects
-        # if len(X) != len(self.Vs_):
-        #     raise ValueError("The number of subjects does not match the one"
-        #                      " in the model.")
-
         Us = [None] * len(X)
         Vu, Vsig, Vv = np.linalg.svd(self.V_, full_matrices=False)
         for subject in range(len(X)):
-            U = fast_dot(fast_dot(X[subject].T,Vu),np.diag(Vsig / fast_dot(Vsig**2,Vv)))
+            U = X[subject].T.dot(Vu).dot(np.diag(Vsig / (Vsig**2).dot(Vv)))
             Us[subject] = self._update_us(X[subject], self.Vs_[subject], U)
 
         return Us
 
-    @staticmethod
-    def _create_laplacian_operator(R):
-        """ Pre-computes the 3D-Laplacian operator
-        Parameters
-        ----------
-        R : list of 2D arrays, element i has shape=[voxels, 3]
-            Each row in the list contains the scanner coordinate of each voxel
-            of fMRI data of all subjects.
-        Returns
-        -------
-        2D sparse array, shape=[voxels, voxels]
-            The laplacian matrix.
-        """
-        nmax = R.max(axis=0)+1
-        voxels = R.shape[0]
-        cube = -np.ones((nmax))
-        cube[R[:, 0], R[:, 1], R[:, 2]] = np.arange(voxels)
 
-        data = np.zeros(7*voxels)
-        row_ind = np.zeros(7*voxels)
-        col_ind = np.zeros(7*voxels)
-        kernel = np.array([[-1, 0, 0], [1, 0, 0],
-                           [0, -1, 0], [0, 1, 0],
-                           [0, 0, -1], [0, 0, 1]])
-        total_values = 0
-        for v in range(voxels):
-            offset = 0
-            positions = kernel + R[v, :]
-            for i in range(positions.shape[0]):
-                if np.any(positions[i, :] < 0) or \
-                   np.any(positions[i, :] >= nmax) or \
-                   cube[positions[i, 0], positions[i, 1], positions[i, 2]] < 0:
-                    continue
-                data[total_values+offset] = -1.0
-                row_ind[total_values+offset] = v
-                col_ind[total_values+offset] = cube[positions[i, 0],
-                                                    positions[i, 1],
-                                                    positions[i, 2]]
-                offset += 1
+    def _build_3d_v(self,R):
+        min_idx = np.min(R,axis=0)
+        R_new = R - min_idx
+        max_idx = np.max(R,axis=0) - min_idx
+        self.Q = (R_new[:,0],R_new[:,1],R_new[:,2])
+        self.meanv = np.zeros((max_idx[0]+1,max_idx[1]+1,max_idx[2]+1),dtype=np.float32)
+        self.newv = np.zeros_like(self.meanv)
+        return self
+ 
 
-            data[total_values+offset] = offset
-            row_ind[total_values+offset] = v
-            col_ind[total_values+offset] = v
-            total_values += offset+1
+    def _tvl1(self,v):
+        mult = np.max(abs(v))
+        self.meanv[self.Q[0],self.Q[1],self.Q[2]] = v/mult
+        self.newv = denoise_tv_bregman(self.meanv,self.weight*mult)
+        v_new = self.newv[self.Q[0],self.Q[1],self.Q[2]]
+        return v_new    
 
-        L = scipy.sparse.csr_matrix((data[:total_values],
-                                     (row_ind[:total_values],
-                                      col_ind[:total_values])),
-                                    shape=(voxels, voxels))
-        return L
 
-    def _laplacian(self, x):
-        """Computes the inner product with a 3D-laplacian operator.
-        Parameters
-        ----------
-        x : array, shape=[voxels, ] or [voxels, n]
-            An array with one or more volumes represented as a column
-            vectorized set of voxels.
-        Returns
-        -------
-        array (same shape as x) with the result of applying the 3D laplacian
-        operator on each column of x.
-        """
-        return self.L_.dot(x)
+    def _lasso(self,v):
+        voxels = v.shape[0]
+        lasso = FistaRegressor(C=self.mu,alpha=self.lam,penalty='l1')
+        lasso.fit(np.eye(voxels),v)
+        return lasso.coef_
+
 
     def _objective_function(self, data, Us, Vs, V):
         """Calculate the objective function of MSDL
@@ -272,8 +187,8 @@ class MSDL(BaseEstimator, TransformerMixin):
                                         'fro')**2 \
                          + self.mu * np.linalg.norm(Vs[s] - V, 'fro')**2
         objective /= 2
-        objective += self.lam * (np.sum(np.abs(V)) + 0.5 *
-                                 np.sum(V * self._laplacian(V)))
+        objective += self.lam * np.sum(np.abs(V))
+
         return objective
 
     @staticmethod
@@ -296,8 +211,8 @@ class MSDL(BaseEstimator, TransformerMixin):
         A = fast_dot(Vs.T,Vs)
         B = fast_dot(data.T,Vs)
         for l in range(factors):
-            dir = Us[:, l] + (B[:, l] - fast_dot(Us,A[:, l])) / A[l, l]
-            Us[:, l] = dir / np.amax((np.linalg.norm(dir, ord=2), 1.0))
+            dir = Us[:, l] + np.nan_to_num((B[:, l] - fast_dot(Us,A[:, l])) / A[l, l])
+            Us[:, l] = np.nan_to_num(dir / np.amax((np.linalg.norm(dir, ord=2), 1.0)))
         return Us
 
     def _update_vs(self, data, V, Us):
@@ -317,59 +232,8 @@ class MSDL(BaseEstimator, TransformerMixin):
         """
         factors = self.factors
         A = fast_dot(Us.T,Us) + self.mu * np.eye(factors)
-        Vsi = V + np.linalg.solve(A, fast_dot(Us.T,(data.T - fast_dot(Us,V.T)))).T
+        Vsi = V + np.nan_to_num(np.linalg.solve(A, fast_dot(Us.T,(data.T - fast_dot(Us,V.T)))).T)
         return Vsi
-
-    @staticmethod
-    def _shrink(v, offset):
-        """Computes soft shrinkage on the elements of an array
-        Parameters
-        ----------
-        v : array
-            An array with input values
-        offset : float
-            Offset for applying the shrinkage function
-        Returns
-        -------
-        The array after applying the element-wise soft-thresholding function.
-        """
-        return np.sign(v) * np.max(np.abs(v) - offset, 0)
-
-    def _prox(self, v):
-        """Computes the proximal operator of a set of vectors
-        Parameters
-        ----------
-        v : array, shape=[voxels, ]  or [voxels, n]
-            One or more column-vectors containing each a volume
-        Returns
-        -------
-        v_star : (shape=same as input) with the proximal operator applied to
-            the input vectors in v
-        """
-        v_star = v.copy()
-        z = v_star
-        tau = 1.0
-        kappa = self.kappa/(1 + self.gamma * self.max_eigval_L_)
-        obj_fun_prev = 0
-        for l in range(self.fista_iter):
-            v0 = v_star
-            v_star = self._shrink(z - kappa * (z - v + self.gamma *
-                                               self._laplacian(z)),
-                                  kappa * self.gamma)
-
-            # Check for convergence
-            obj_fun = \
-                np.sum((v_star-v)**2, 0) + \
-                self.gamma * (np.sum(np.abs(v_star), 0) +
-                              0.5 * np.sum(v * self._laplacian(v), 0))
-            if l > 0 and obj_fun > obj_fun_prev:
-                return v0
-            obj_fun_prev = obj_fun
-
-            tau0 = tau
-            tau = (1.0 + np.sqrt(1.0 + 4.0*tau0*tau0))/2.0
-            z = v_star + (tau0-1)/tau*(v_star - v0)
-        return v_star
 
     def _update_v(self, data, Vs):
         """ Spatial map template update
@@ -391,7 +255,12 @@ class MSDL(BaseEstimator, TransformerMixin):
         meanVs /= subjects
         V = np.zeros(Vs[0].shape)
         for l in range(Vs[0].shape[1]):
-            V[:, l] = self._prox(meanVs[:, l])
+            if self.method == 'tvl1':
+                V[:, l] = np.nan_to_num(self._tvl1(meanVs[:, l]))
+            elif self.method == 'l1':
+                V[:, l] = np.nan_to_num(self._lasso(meanVs[:, l]))
+            else:
+                raise Exception('invalid method')
         return V
 
     def _msdl(self, data):
@@ -421,13 +290,13 @@ class MSDL(BaseEstimator, TransformerMixin):
         Vu, Vsig, Vv = np.linalg.svd(V, full_matrices=False)
         for i in range(subjects):
             Vs[i] = V.copy()
-            Us[i] = fast_dot(fast_dot(data[i].T,Vu),np.diag(Vsig / fast_dot(Vsig**2,Vv)))
+            Us[i] = fast_dot(fast_dot(data[i].T,Vu),np.nan_to_num(np.diag(Vsig / fast_dot(Vsig**2,Vv))))
 
+        # Calculate the current objective function value
+        print(self._objective_function(data, Us, Vs, V))
 
         # Main loop of the algorithm
         for iteration in range(self.n_iter):
-
-            self.gamma = self.lam/self.mu/subjects
 
             # Update each subject's decomposition:
             for i in range(subjects):
@@ -436,6 +305,8 @@ class MSDL(BaseEstimator, TransformerMixin):
 
             # Update the spatial maps template:
             V = self._update_v(data, Vs)
+            print('After V update %d' %
+                        self._objective_function(data, Us, Vs, V))
 
         return Us, Vs, V
 
@@ -454,7 +325,7 @@ class MSDL(BaseEstimator, TransformerMixin):
         """
         subjects = len(data)
         voxels = data[0].shape[0]
-        fica = FastICA(n_components=factors, whiten=True, max_iter=300,
+        fica = FastICA(n_components=factors, whiten=True, max_iter=200,
                        random_state=self.rand_seed)
         samples = 0
         for i in range(subjects):
@@ -466,6 +337,6 @@ class MSDL(BaseEstimator, TransformerMixin):
             data_stacked[:, samples:(samples+data[i].shape[1])] = data[i]
             samples += data[i].shape[1]
 
-        V = fica.fit_transform(data_stacked)
+        V = np.nan_to_num(fica.fit_transform(data_stacked))
 
         return V

@@ -38,7 +38,7 @@ def run_expt(nfeature,initseed,model,roi,loo_ds):
 		align = importlib.import_module('model.ica')
 	elif model in ['all_gica','indv_gica']:
 		align = importlib.import_module('model.gica')
-	elif model in ['all_dict','indv_dict']:
+	elif model in ['multi_dict','all_dict','indv_dict']:
 		align = importlib.import_module('model.dictlearn')		
 	elif model in ['multi_srm']:
 		align = importlib.import_module('model.'+model)
@@ -59,7 +59,7 @@ def run_expt(nfeature,initseed,model,roi,loo_ds):
 	membership = ws['membership']
 
 	# load location information for dictionary learning
-	if model in ['all_dict','indv_dict']:
+	if model in ['multi_dict','all_dict','indv_dict']:
 		ws = np.load(options['input_path']+'multi_srm/roi_location.npz')
 		loc = ws[roi]
 		del ws
@@ -110,7 +110,7 @@ def run_expt(nfeature,initseed,model,roi,loo_ds):
 		# S is the transformed alignment data from training subjects
 		if model in ['multi_srm']:
 			W,S,noise = align.align(data_align,train_mb,niter,nfeature,initseed,model)
-		elif model in ['all_dict','indv_dict']:
+		elif model in ['multi_dict','all_dict','indv_dict']:
 			W_grp,W,S= align.align(data_align,train_mb,niter,nfeature,initseed,model,loc)
 		else:
 			W,S = align.align(data_align,train_mb,niter,nfeature,initseed,model)

@@ -9,9 +9,9 @@
 #SBATCH -o slurm-%j.out
 #SBATCH --mail-type=fail
 #SBATCH --mail-user=hejiaz@princeton.edu
-#SBATCH -t 150
-#SBATCH --mem=32768
+#SBATCH -t 300
+#SBATCH --mem=48000
 
-./run_exp_all.py $1 $2 $3
+./run_exp_all.py $1 $2 $3 #-s $4 -d $5
 
 ###--mem=65536

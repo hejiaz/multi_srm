@@ -37,8 +37,10 @@ def run_expt(nfeature,initseed,expopt,model,roi,ds):
 	pred = importlib.import_module('experiment.'+expt)
 
 	# load path
-	# setting = open('setting.yaml')
-	setting = open('../setting.yaml')
+	try:
+		setting = open('setting.yaml')
+	except:
+		setting = open('../setting.yaml')
 	options = yaml.safe_load(setting)
 
 	# load location information for dictionary learning

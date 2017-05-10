@@ -67,11 +67,8 @@ def zscore_data_all(data):
 for d in range(ndata):
 	data[d] = zscore_data_all(data[d])
 
-W_all, W_new,S_new = align(data,membership,20,nfeature,initseed,'indv_dict',loc)
+W_all, W_new,S_new = align(data,membership,10,nfeature,initseed,'multi_dict',loc)
 
-print (W_all[0].shape)
-print (W_new[0].shape)
-print (S_new[0].shape)
 
 
 

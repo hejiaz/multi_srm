@@ -9,82 +9,72 @@ from scipy.stats import rankdata
 # map fMRI data to word-embeddings, uses past num_previous time steps in both learning and testing
 # use the averaged transformed data, output a single accuracy
 # arguments:
-# transformed_data: a list of 3d arrays (nfeature x time x # subjects in that dataset)
+# transformed_data: a 3d array (nfeature x time x # subjects in that dataset)
 # word_tst: a 2d array (300*(1+num_previous) x time), already performed temporal zero mean and added previous time steps
 # W_ft: a 2d array (300*(1+num_previous) x nfeature), linear mapping matrix learned from training data
 # num_previous: number of previous time steps added to transformed data and wordembeddings, default is 2
-# num_chunks: a list of length # datasets, number of scenes in classification/ranking experiment for each dataset. 
+# num_chunks: number of scenes in classification/ranking experiment for each dataset. 
 # Chance level is 1/num_chunks
 # return:
-# accu_class: a 1d array (# datasets), classification accuracy, chance level 1/num_chunks
-# accu_rank: a 1d array (# datasets), ranking accuracy, chance level 50%
+# accu_class: a single number, classification accuracy, chance level 1/num_chunks
+# accu_rank: a single number, ranking accuracy, chance level 50%
 def predict(transformed_data,word_tst,W_ft,num_chunks,num_previous):
     # Process fmri data
     # average data across all subjects
-    ndata = len(transformed_data)
-    transformed_avg = []
-    for d in range(ndata):       
-        nsubj = transformed_data[d].shape[2]
-        trans_tmp = transformed_data[d][:,:,0]
-        for m in range(1,nsubj):
-            trans_tmp += transformed_data[d][:,:,m]
-        transformed_avg.append(trans_tmp/nsubj)
+    transformed_avg = transformed_data[:,:,0]
+    nsubj = transformed_data.shape[2]
+    for m in range(1,nsubj):
+        transformed_avg += transformed_data[:,:,m]
+    transformed_avg = transformed_avg/nsubj
     del transformed_data
 
-    FT_classification_score = np.zeros((ndata),dtype=np.float32)
-    FT_rank_score = np.zeros((ndata),dtype=np.float32)    
-    for d in range(ndata):
-        # add previous time steps
-        fmri_tst = add_prev_time_steps(transformed_avg[d], num_previous)    
-        # comparisons in Semantic space (i.e. fMRI -> text) (procrustes)
-        FT_prediction = fast_dot(W_ft, fmri_tst)
-        FT_classification_score[d] = scene_classification(word_tst[d], FT_prediction, num_chunks[d])
-        FT_rank_score[d] = scene_ranking(word_tst[d], FT_prediction, num_chunks[d])
+    # add previous time steps
+    fmri_tst = add_prev_time_steps(transformed_avg, num_previous)    
+    # comparisons in Semantic space (i.e. fMRI -> text) (procrustes)
+    FT_prediction = fast_dot(W_ft, fmri_tst)
+    FT_classification_score = scene_classification(word_tst, FT_prediction, num_chunks)
+    FT_rank_score = scene_ranking(word_tst, FT_prediction, num_chunks)
 
     # return accu_class,accu_rank
     return FT_classification_score, FT_rank_score
 
 # used in leave-one-out, output accuracy for left-out subjects
 # arguments:
-# transformed_data: a list of 3d arrays (nfeature x time x # subjects in that dataset)
-# word_tst: a list of 2d arrays (300*(1+num_previous) x time), already performed temporal zero mean and added previous time steps
+# transformed_data: a 3d array (nfeature x time x # subjects in that dataset)
+# word_tst: a 2d array (300*(1+num_previous) x time), already performed temporal zero mean and added previous time steps
 # W_ft: a 2d array (300*(1+num_previous) x nfeature), linear mapping matrix learned from training data
-# tst_subj: a list (length-ndata) of lists of length (# left-out subjects in dataset d), index of left-out subjects
+# tst_subj: a list of length (# left-out subjects in dataset), index of left-out subjects
 # num_previous: number of previous time steps added to transformed data and wordembeddings, default is 2
-# num_chunks: a list of length # datasets, number of scenes in classification/ranking experiment for each dataset. 
+# num_chunks: number of scenes in classification/ranking experiment for each dataset. 
 # Chance level is 1/num_chunks
 # return:
-# accu_class: a 1d array (# datasets), classification accuracy, chance level 1/num_chunks
-# accu_rank: a 1d array (# datasets), ranking accuracy, chance level 50%
+# accu_class: a single number, classification accuracy, chance level 1/num_chunks
+# accu_rank: a single number, ranking accuracy, chance level 50%
 def predict_loo(transformed_data,word_tst,W_ft,tst_subj,num_chunks,num_previous):
     # Process fmri data
     # average data across all testing subjects
-    ndata = len(transformed_data)
-    transformed_avg = []
-    for d in range(ndata):       
-        nsubj = len(tst_subj[d])
-        trans_tmp = transformed_data[d][:,:,tst_subj[d][0]]
-        for m in range(1,nsubj):
-            trans_tmp += transformed_data[d][:,:,tst_subj[d][m]]
-        transformed_avg.append(trans_tmp/nsubj)
+      
+    nsubj = len(tst_subj)
+    transformed_avg = transformed_data[:,:,tst_subj[0]]
+    for m in range(1,nsubj):
+        transformed_avg += transformed_data[:,:,tst_subj[m]]
+    transformed_avg = transformed_avg/nsubj
     del transformed_data
 
-    FT_classification_score = np.zeros((ndata),dtype=np.float32)
-    FT_rank_score = np.zeros((ndata),dtype=np.float32) 
-    for d in range(ndata):
-        # add previous time steps
-        fmri_tst = add_prev_time_steps(transformed_avg[d], num_previous)     
-        # comparisons in Semantic space (i.e. fMRI -> text) (procrustes)
-        FT_prediction = fast_dot(W_ft, fmri_tst)
-        FT_classification_score[d] = scene_classification(word_tst[d], FT_prediction, num_chunks[d])
-        FT_rank_score[d] = scene_ranking(word_tst[d], FT_prediction, num_chunks[d])
+    # add previous time steps
+    fmri_tst = add_prev_time_steps(transformed_avg, num_previous)     
+    # comparisons in Semantic space (i.e. fMRI -> text) (procrustes)
+    FT_prediction = fast_dot(W_ft, fmri_tst)
+    FT_classification_score = scene_classification(word_tst, FT_prediction, num_chunks)
+    FT_rank_score = scene_ranking(word_tst, FT_prediction, num_chunks)
 
     # return accu_class,accu_rank
     return FT_classification_score, FT_rank_score
 
 # Learn linear maps: using Procrustes constraint
 # learn fMRI -> text (Y -> X) using training data
-# transformed train: a list of 2d arrays (feature x nTR(align))
+# transformed train: a list of 2d arrays
+# word_tr: a 2d array (feature x nTR(align))
 def learn_linear_map(transformed_train,word_tr,num_previous):
     fmri_tr = add_prev_time_steps_all(transformed_train, num_previous)
     W_ft = procrustes_fit(word_tr,fmri_tr)
@@ -129,21 +119,74 @@ def process_semantic(word_tr,word_tst,num_previous):
     word_tst = add_prev_time_steps(word_tst, num_previous)
     return word_tr, word_tst
 
-# process word embeddings of all datasets and concatenate training
-# arguments:
-# word_tr/word_tst: a list of 2d arrays, (300 x nTR (align/pred))
-# return:
-# word_tr_all: a 2d array ((1+num_previous)*300 x sum of nTR in all datasets)
-# word_tst_all: a list of 2d arrays ((1+num_previous)*100 x nTR in that dataset)
+
+# helper function to perform subtract_column_mean and add_prev_time_steps
+# word_tr: a list of 2d arrays
+# word_tst: a list of 2d arrays, (300 x nTR (align/pred))
 def process_semantic_all(word_tr,word_tst,num_previous):
-    ndim = word_tr[0].shape[0]
-    word_tr_all = np.empty((ndim*(1+num_previous),0),dtype=np.float32)
-    word_tst_all = []
-    for d in range(len(word_tr)):
-        word_tr_tmp, word_tst_tmp = process_semantic(word_tr[d],word_tst[d],num_previous)
-        word_tr_all = np.concatenate((word_tr_all,word_tr_tmp),axis=1)
-        word_tst_all.append(word_tst_tmp)
-    return word_tr_all,word_tst_all
+    # Concatenate word data to perform temporal zero mean
+    num_train_ds = len(word_tr)
+    word_tr_arr = word_tr[0]
+    tr_length = [0,word_tr[0].shape[1]]
+    for i in range(1,num_train_ds):
+        word_tr_arr = np.concatenate((word_tr_arr,word_tr[i]),axis=1)
+        tr_length.append(tr_length[i]+word_tr[i].shape[1])
+    # Temporal Zero Mean:
+    # calculate average for training, and subtract that average out of the test
+    word_tr_arr, avg_tr_word_vec = subtract_column_mean(word_tr_arr)
+    for d in range(len(word_tst)):
+        word_tst[d] = word_tst[d] - avg_tr_word_vec[:, None]
+    # put word_tr back to a list
+    word_tr = []
+    for i in range(num_train_ds):
+        word_tr.append(word_tr_arr[:,tr_length[i]:tr_length[i+1]])
+    del word_tr_arr
+    # add previous time steps to semantic stuff
+    word_tr = add_prev_time_steps_all(word_tr, num_previous)
+    for d in range(len(word_tst)):
+        word_tst[d] = add_prev_time_steps(word_tst[d], num_previous)
+    return word_tr, word_tst
+
+
+# # helper function to perform subtract_column_mean and add_prev_time_steps
+# # word_tr: a list of 2d arrays, (300 x nTR (align/pred))
+# # word_tst: a list of 2d arrays, (300 x nTR (align/pred))
+# # return: word_tr concatenated, word_tst in list
+# def process_semantic_all(word_tr,word_tst,num_previous):
+#     word_tr_new = np.empty((300*(1+num_previous),0),dtype=np.float32)
+#     word_tst_new = []
+#     for d in range(len(word_tr)):
+#         word_tr_ds,word_tst_ds = process_semantic(word_tr[d],word_tst[d],num_previous)
+#         word_tr_new = np.concatenate((word_tr_new,word_tr_ds),axis=1)
+#         word_tst_new.append(word_tst_ds)
+#     return word_tr_new, word_tst_new
+
+
+# # helper function to perform subtract_column_mean and add_prev_time_steps
+# # word_tr: a list of 2d arrays
+# # word_tst: 2d array, (300 x nTR (align/pred))
+# def process_semantic_all(word_tr,word_tst,num_previous):
+#     # Concatenate word data to perform temporal zero mean
+#     num_train_ds = len(word_tr)
+#     word_tr_arr = word_tr[0]
+#     tr_length = [0,word_tr[0].shape[1]]
+#     for i in range(1,num_train_ds):
+#         word_tr_arr = np.concatenate((word_tr_arr,word_tr[i]),axis=1)
+#         tr_length.append(tr_length[i]+word_tr[i].shape[1])
+#     # Temporal Zero Mean:
+#     # calculate average for training, and subtract that average out of the test
+#     word_tr_arr, avg_tr_word_vec = subtract_column_mean(word_tr_arr)
+#     word_tst = word_tst - avg_tr_word_vec[:, None]
+#     # put word_tr back to a list
+#     word_tr = []
+#     for i in range(num_train_ds):
+#         word_tr.append(word_tr_arr[:,tr_length[i]:tr_length[i+1]])
+#     del word_tr_arr
+#     # add previous time steps to semantic stuff
+#     word_tr = add_prev_time_steps_all(word_tr, num_previous)
+#     word_tst = add_prev_time_steps(word_tst, num_previous)
+#     return word_tr, word_tst
+
 
 # We learn the map Y -> X (X = WY)
 # where X = voxels x TRs, Y = features x TRs, W = voxels x features 

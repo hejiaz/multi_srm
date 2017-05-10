@@ -48,7 +48,7 @@ def align(data, membership, niter, nfeature, initseed, model):
 
     W_raw = []
     S_raw = []
-    for d in range(ndata):
+    for d in range(min([ndata,4])):
         data_tmp = np.empty(shape=(0,nTR[d]),dtype=np.float32)
         for m in range(nsubjs):
             if membership[m,d] != -1:
@@ -64,6 +64,10 @@ def align(data, membership, niter, nfeature, initseed, model):
         for m in range(subj_data[d]):
             W_tmp[:,:,m] = W_all[m*nvoxel:(m+1)*nvoxel,:]
         W_raw.append(W_tmp)
+
+    for d in range(4,ndata):
+        W_raw.append([])
+        S_raw.append([])
 
     if model == 'indv_ica':
         return W_raw, S_raw

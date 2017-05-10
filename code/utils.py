@@ -77,7 +77,7 @@ def find_shared_subjects_between_two(membership,ds1,ds2):
             idx1.append(membership[m,ds1])
             idx2.append(membership[m,ds2])
     if not idx1:
-        raise Exception('no shared subject between left-out dataset and base dataset')
+        raise Exception('no shared subject between two datasets')
     return idx1,idx2
 
 # map index of some subjects in a dataset into global index of these subjects 
@@ -195,28 +195,65 @@ def find_train_test_subj(train_mb,test_mb,idx):
 # S: a list of 2d arrays (nfeature x time), each array contains shared response from a single dataset
 # test_mb: 2d array (# test subjects x total # datasets), membership information of all test subjects
 # idx: which dataset to transform, idx can be 0 to ndata-1
+# model: 'multi_srm' or 'multi_dict'
+# W_all: a 2d array (voxel x nfeature), group spatial map, only used in 'multi_dict'
 # return:
 # W: a 3d array (voxel x nfeature x # test subjects in dataset idx)
-def learn_test_W_use_all(data,S,test_mb,idx):
+def learn_test_W_use_all(data,S,test_mb,idx,model,W_all=None):
     nsubjs,ndata = test_mb.shape
     voxel = data[idx].shape[0]
     nfeature = S[idx].shape[0]
     W = np.empty((voxel,nfeature,0),dtype=np.float32)
-    for m in range(nsubjs):
-        if test_mb[m,idx] != -1:
-            # extract X and S
-            X_tmp = np.empty((voxel,0),dtype=np.float32)
-            S_tmp = np.empty((nfeature,0),dtype=np.float32)
-            for d in range(ndata):
-                if test_mb[m,d] != -1:
-                    X_tmp = np.concatenate((X_tmp,data[d][:,:,test_mb[m,d]]),axis=1)
-                    S_tmp = np.concatenate((S_tmp,S[d]),axis=1)
-            # compute W
-            Am = fast_dot(X_tmp,S_tmp.T)
-            pert = np.eye(voxel,M=nfeature,dtype=np.float32)
-            Um, _, Vm = np.linalg.svd(Am+0.0001*pert, full_matrices=False)
-            W_tmp = fast_dot(Um,Vm)  # W = UV^T
-            W = np.concatenate((W,W_tmp[:,:,None]),axis=2)   
+    if model in ['multi_srm']:
+        for m in range(nsubjs):
+            if test_mb[m,idx] != -1:
+                # extract X and S
+                X_tmp = np.empty((voxel,0),dtype=np.float32)
+                S_tmp = np.empty((nfeature,0),dtype=np.float32)
+                for d in range(ndata):
+                    if test_mb[m,d] != -1:
+                        X_tmp = np.concatenate((X_tmp,data[d][:,:,test_mb[m,d]]),axis=1)
+                        S_tmp = np.concatenate((S_tmp,S[d]),axis=1)
+                # compute W
+                Am = fast_dot(X_tmp,S_tmp.T)
+                pert = np.eye(voxel,M=nfeature,dtype=np.float32)
+                Um, _, Vm = np.linalg.svd(Am+0.0001*pert, full_matrices=False)
+                W_tmp = fast_dot(Um,Vm)  # W = UV^T
+                W = np.concatenate((W,W_tmp[:,:,None]),axis=2)
+    else:
+        for m in range(nsubjs):
+            if test_mb[m,idx] != -1:
+                # extract X and S
+                X_tmp = np.empty((voxel,0),dtype=np.float32)
+                S_tmp = np.empty((nfeature,0),dtype=np.float32)
+                for d in range(ndata):
+                    if test_mb[m,d] != -1:
+                        X_tmp = np.concatenate((X_tmp,data[d][:,:,test_mb[m,d]]),axis=1)
+                        S_tmp = np.concatenate((S_tmp,S[d]),axis=1)
+                # solve least square
+                tmp1 = fast_dot(S_tmp,S_tmp.T)
+                try:
+                    tmp = np.nan_to_num(np.linalg.inv(tmp1))
+                except:
+                    tmp = np.nan_to_num(np.linalg.pinv(tmp1))
+                W_tmp = fast_dot(fast_dot(X_tmp,S_tmp.T),tmp)
+                W = np.concatenate((W,W_tmp[:,:,None]),axis=2)
+                      
+    # elif model in ['multi_dict']:
+    #     for m in range(nsubjs):
+    #         if test_mb[m,idx] != -1:
+    #             A = np.zeros((nfeature,nfeature),dtype=np.float32)
+    #             B = np.zeros((voxel,nfeature),dtype=np.float32)
+    #             for d in range(ndata):
+    #                 if test_mb[m,d] != -1:
+    #                     A += fast_dot(S[d],S[d].T)
+    #                     B += fast_dot(data[d][:,:,test_mb[m,d]],S[d].T)
+    #             A += np.eye(nfeature,dtype=np.float32)
+    #             B += W_all
+    #             W_tmp = np.nan_to_num(np.linalg.solve(A, B.T).T)
+    #             W = np.concatenate((W,W_tmp[:,:,None]),axis=2)
+    # else:
+    #     raise Exception('invalid model')   
     return W
 
 # learn W matrix of test subjects in a single dataset only using data from this dataset
@@ -245,16 +282,16 @@ def learn_test_W_use_single_dataset(data,S,test_mb,idx,model,W_all=None):
                 pert = np.eye(voxel,M=nfeature,dtype=np.float32)
                 Um, _, Vm = np.linalg.svd(Am+0.0001*pert, full_matrices=False)
                 W_tmp = fast_dot(Um,Vm)  # W = UV^T 
-            elif model in ['all_dict']:
-                A = fast_dot(S_tmp,S_tmp.T) + np.eye(nfeature,dtype=np.float32)
-                W_tmp = W_all + np.linalg.solve(A, fast_dot(S_tmp,(X_tmp.T - fast_dot(S_tmp.T,W_all.T)))).T
+            # elif model in ['all_dict']:
+            #     A = fast_dot(S_tmp,S_tmp.T) + np.eye(nfeature,dtype=np.float32)
+            #     W_tmp = W_all + np.nan_to_num(np.linalg.solve(A, fast_dot(S_tmp,(X_tmp.T - fast_dot(S_tmp.T,W_all.T)))).T)
             else:
                 # solve least square
                 tmp1 = fast_dot(S_tmp,S_tmp.T)
                 try:
-                    tmp = np.linalg.inv(tmp1)
+                    tmp = np.nan_to_num(np.linalg.inv(tmp1))
                 except:
-                    tmp = np.linalg.pinv(tmp1)  
+                    tmp = np.nan_to_num(np.linalg.pinv(tmp1))
                 W_tmp = fast_dot(fast_dot(X_tmp,S_tmp.T),tmp)
 
             # elif model in ['all_ica','all_gica']:
@@ -316,8 +353,8 @@ def learn_W_jointly(data,S,W,train_mb,test_mb,idx,model,W_all=None):
     for m in range(num_train):
         W_new[:,:,train_subj[m,1]] = W[:,:,train_subj[m,0]]
     # learn W of testing subjects
-    if model in ['multi_srm']:
-        W_test = learn_test_W_use_all(data,S,test_mb,idx)
+    if model in ['multi_srm','multi_dict']:
+        W_test = learn_test_W_use_all(data,S,test_mb,idx,model,W_all)
     else:
         W_test = learn_test_W_use_single_dataset(data,S,test_mb,idx,model,W_all)
     for m in range(num_test):
@@ -373,16 +410,16 @@ def learn_W_indv_algo(data,S,W,train_mb,test_mb,idx,model,W_all=None):
             pert = np.eye(voxel,M=nfeature,dtype=np.float32)
             Um, _, Vm = np.linalg.svd(Am+0.0001*pert, full_matrices=False)
             W_tmp = fast_dot(Um,Vm)  # W = UV^T 
-        elif model in ['indv_dict']:
-            A = fast_dot(S_tmp,S_tmp.T) + np.eye(nfeature,dtype=np.float32)
-            W_tmp = W_all[idx] + np.linalg.solve(A, fast_dot(S_tmp,(X_tmp.T - fast_dot(S_tmp.T,W_all[idx].T)))).T
+        # elif model in ['indv_dict']:
+        #     A = fast_dot(S_tmp,S_tmp.T) + np.eye(nfeature,dtype=np.float32)
+        #     W_tmp = W_all[idx] + np.nan_to_num(np.linalg.solve(A, fast_dot(S_tmp,(X_tmp.T - fast_dot(S_tmp.T,W_all[idx].T)))).T)
         else: 
             # solve least square
             tmp1 = fast_dot(S_tmp,S_tmp.T)
             try:
-                tmp = np.linalg.inv(tmp1)
+                tmp = np.nan_to_num(np.linalg.inv(tmp1))
             except:
-                tmp = np.linalg.pinv(tmp1)  
+                tmp = np.nan_to_num(np.linalg.pinv(tmp1))
             W_tmp = fast_dot(fast_dot(X_tmp,S_tmp.T),tmp)   
                      
         # elif model in ['indv_ica','indv_gica']:
@@ -406,7 +443,7 @@ def learn_W_indv_algo(data,S,W,train_mb,test_mb,idx,model,W_all=None):
 # model: 'multi_srm','all_srm','all_ica','all_gica','all_dict','indv_srm','indv_ica','indv_gica','indv_dict'
 # see comments of sub-functions for arguments information
 def learn_W(data,S,W,train_mb,test_mb,idx,model,W_all=None):
-    if model in ['multi_srm','all_srm','all_ica','all_gica','all_dict']:
+    if model in ['multi_srm','multi_dict','all_srm','all_ica','all_gica']:
         W_all,loo = learn_W_jointly(data,S,W,train_mb,test_mb,idx,model,W_all)
     elif model in ['indv_srm','indv_ica','indv_gica','indv_dict']:
         W_all,loo = learn_W_indv_algo(data,S,W,train_mb,test_mb,idx,model,W_all)
@@ -437,9 +474,9 @@ def learn_W_loo_ds(data,S,model):
             # solve least square
             tmp1 = fast_dot(S,S.T)
             try:
-                tmp = np.linalg.inv(tmp1)
+                tmp = np.nan_to_num(np.linalg.inv(tmp1))
             except:
-                tmp = np.linalg.pinv(tmp1)  
+                tmp = np.nan_to_num(np.linalg.pinv(tmp1))
             W_tmp = fast_dot(fast_dot(X_tmp,S.T),tmp)
             # if model in ['indv_ica','indv_gica','all_ica','all_gica']:
             #     # decorrelation
@@ -462,7 +499,43 @@ def transform(data,W,model):
         W_tmp = W[:,:,m]
         X_tmp = data[:,:,m]
         if model in ['multi_srm','all_srm','indv_srm']:
-            S_tmp = fast_dot(W[:,:,m].T,data[:,:,m])
+            S_tmp = fast_dot(W_tmp.T,X_tmp)
+        else:
+            tmp1 = fast_dot(W_tmp.T,W_tmp)
+            try:
+                tmp = np.nan_to_num(np.linalg.inv(tmp1))
+            except:
+                tmp = np.nan_to_num(np.linalg.pinv(tmp1))
+            S_tmp = fast_dot(tmp,fast_dot(W_tmp.T,X_tmp))
+            if model in ['multi_dict','indv_dict']:
+                A = fast_dot(W_tmp.T,W_tmp)
+                B = fast_dot(X_tmp.T,W_tmp)
+                for l in range(nfeature):
+                    dir = S_tmp[l, :] + np.nan_to_num((B[:, l] - fast_dot(S_tmp.T,A[:, l])) / A[l, l])
+                    S_tmp[l, :] = np.nan_to_num(dir / np.amax((np.linalg.norm(dir, ord=2), 1.0)))
+        S[:,:,m] = zscore_data(S_tmp)
+    return S
+
+
+# transform prediction data of subjects (both training and testing) in a single dataset (idx). data is a list,
+# used when number of TRs are different across subjects
+# arguments:
+# data: a list of 2d arrays (voxel x time) of length (# subjects[idx]), prediction data from dataset idx
+# W: a 3d array (voxel x nfeature x # subjects[idx]), subjects are in the same order as in data
+# return:
+# S: a list of 2d arrays (nfeature x time) of length (# subjects[idx])
+def transform_list(data,W,model):
+    voxel,nfeature,nsubjs = W.shape
+    nTR = []
+    for m in range(nsubjs):
+        nTR.append(data[m].shape[1])
+    
+    S = []
+    for m in range(nsubjs):
+        W_tmp = W[:,:,m]
+        X_tmp = data[m]
+        if model in ['multi_srm','all_srm','indv_srm']:
+            S_tmp = fast_dot(W_tmp.T,X_tmp)
         else:
             tmp1 = fast_dot(W_tmp.T,W_tmp)
             try:
@@ -470,13 +543,13 @@ def transform(data,W,model):
             except:
                 tmp = np.linalg.pinv(tmp1)
             S_tmp = fast_dot(tmp,fast_dot(W_tmp.T,X_tmp))
-            # if model in ['all_dict','indv_dict']:
-            #     A = fast_dot(W_tmp.T,W_tmp)
-            #     B = fast_dot(X_tmp.T,W_tmp)
-            #     for l in range(nfeature):
-            #         dir = S_tmp[l, :] + (B[:, l] - fast_dot(S_tmp.T,A[:, l])) / A[l, l]
-            #         S_tmp[l, :] = dir / np.amax((np.linalg.norm(dir, ord=2), 1.0))
-        S[:,:,m] = zscore_data(S_tmp)
+            if model in ['multi_dict','indv_dict']:
+                A = fast_dot(W_tmp.T,W_tmp)
+                B = fast_dot(X_tmp.T,W_tmp)
+                for l in range(nfeature):
+                    dir = S_tmp[l, :] + np.nan_to_num((B[:, l] - fast_dot(S_tmp.T,A[:, l])) / A[l, l])
+                    S_tmp[l, :] = np.nan_to_num(dir / np.amax((np.linalg.norm(dir, ord=2), 1.0)))
+        S.append(zscore_data(S_tmp))
     return S
 
 

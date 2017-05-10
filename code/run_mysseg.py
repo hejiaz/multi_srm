@@ -13,21 +13,15 @@ import random
 import sys, os
 sys.path.insert(0, os.path.abspath('..'))
 
-# nfeature = 25
-# initseed = 0
-# expopt = '2nd'
-# num_train = 40
-# loo_flag = True
-# # model = ['multi_srm','srm_rotate','srm_rotate_ind','indv_srm','avg']
-# model = 'multi_srm'
-# roi = 'pt'
-# ds = [0,1,2,3] # which datasets to use: greeneye,milky,vodka,sherlock
-
 def run_expt(nfeature,initseed,expopt,num_train,loo_flag,model,roi,ds):
 	# parameters
 	expt = 'mysseg'
-	niter = 50
+	if model in ['multi_dict','indv_dict']:
+		niter = 30
+	else:
+		niter = 50
 
+	tst_ds = [0,1,2,3]
 	print (model)
 	print (roi)
 
@@ -38,7 +32,7 @@ def run_expt(nfeature,initseed,expopt,num_train,loo_flag,model,roi,ds):
 		align = importlib.import_module('model.ica')
 	elif model in ['all_gica','indv_gica']:
 		align = importlib.import_module('model.gica')
-	elif model in ['all_dict','indv_dict']:
+	elif model in ['multi_dict','indv_dict']:
 		align = importlib.import_module('model.dictlearn')		
 	elif model in ['multi_srm']:
 		align = importlib.import_module('model.'+model)
@@ -50,8 +44,10 @@ def run_expt(nfeature,initseed,expopt,num_train,loo_flag,model,roi,ds):
 	pred = importlib.import_module('experiment.'+expt)
 
 	# load path
-	# setting = open('setting.yaml')
-	setting = open('../setting.yaml')
+	try:
+		setting = open('setting.yaml')
+	except:
+		setting = open('../setting.yaml')
 	options = yaml.safe_load(setting)
 
 	# load membership info
@@ -99,13 +95,17 @@ def run_expt(nfeature,initseed,expopt,num_train,loo_flag,model,roi,ds):
 
 	# separate alignment and prediction data
 	TR_1st = []
-	for d in range(ndata):
+	for d in range(len(tst_ds)):
 		TR_1st.append(int(data[d].shape[1]/2))
 	data_1st = []
 	data_2nd = []
 	for d in range(ndata):
-		data_1st.append(ut.zscore_data_all(data[d][:,:TR_1st[d],:]))
-		data_2nd.append(ut.zscore_data_all(data[d][:,TR_1st[d]:,:]))
+		if d in tst_ds:
+			data_1st.append(ut.zscore_data_all(data[d][:,:TR_1st[d],:]))
+			data_2nd.append(ut.zscore_data_all(data[d][:,TR_1st[d]:,:]))
+		else:
+			data_1st.append(ut.zscore_data_all(data[d]))
+			data_2nd.append(ut.zscore_data_all(data[d]))
 	if expopt == '1st':
 		data_align = data_2nd
 		data_pred = data_1st
@@ -117,7 +117,7 @@ def run_expt(nfeature,initseed,expopt,num_train,loo_flag,model,roi,ds):
 	del data
 
 	# load location information for dictionary learning
-	if model in ['all_dict','indv_dict']:
+	if model in ['multi_dict','indv_dict']:
 		ws = np.load(options['input_path']+'multi_srm/roi_location.npz')
 		loc = ws[roi]
 		del ws
@@ -128,7 +128,7 @@ def run_expt(nfeature,initseed,expopt,num_train,loo_flag,model,roi,ds):
 		# S is the transformed alignment data from training subjects
 		if model in ['multi_srm']:
 			W,S,noise = align.align(data_align,train_mb,niter,nfeature,initseed,model)
-		elif model in ['all_dict','indv_dict']:
+		elif model in ['multi_dict','indv_dict']:
 			W_grp,W,S= align.align(data_align,train_mb,niter,nfeature,initseed,model,loc)
 		else:
 			W,S = align.align(data_align,train_mb,niter,nfeature,initseed,model)
@@ -137,8 +137,8 @@ def run_expt(nfeature,initseed,expopt,num_train,loo_flag,model,roi,ds):
 		# W_all = []
 		transformed_pred = []
 		loo = []
-		for d in range(ndata):
-			if model in ['all_dict','indv_dict']:
+		for d in tst_ds:
+			if model in ['multi_dict','indv_dict']:
 				W_tmp,loo_tmp = ut.learn_W(data_align,S,W,train_mb,test_mb,d,model,W_grp)
 			else:
 				W_tmp,loo_tmp = ut.learn_W(data_align,S,W,train_mb,test_mb,d,model)
@@ -155,14 +155,14 @@ def run_expt(nfeature,initseed,expopt,num_train,loo_flag,model,roi,ds):
 	else:
 		# average alignment data of training subjects as transformed alignment data
 		loo = []
-		for d in range(ndata):
+		for d in tst_ds:
 			_,test_subj = ut.find_train_test_subj(train_mb,test_mb,d)
 			loo.append(test_subj)
 		transformed_pred = data_pred
 
 	print ('run experiment')
 	accu = []
-	for d in range(ndata):
+	for d in tst_ds:
 		if loo_flag:
 			accu.append(pred.predict_loo(transformed_pred[d],loo[d]))
 		else:

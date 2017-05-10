@@ -39,7 +39,7 @@ def run_expt(nfeature,initseed,expopt,num_train,loo_flag,model,roi,ds):
 		align = importlib.import_module('model.ica')
 	elif model in ['all_gica','indv_gica']:
 		align = importlib.import_module('model.gica')
-	elif model in ['all_dict','indv_dict']:
+	elif model in ['multi_dict','all_dict','indv_dict']:
 		align = importlib.import_module('model.dictlearn')		
 	elif model in ['multi_srm']:
 		align = importlib.import_module('model.'+model)
@@ -51,8 +51,10 @@ def run_expt(nfeature,initseed,expopt,num_train,loo_flag,model,roi,ds):
 	pred = importlib.import_module('experiment.'+expt)
 
 	# load path
-	# setting = open('setting.yaml')
-	setting = open('../setting.yaml')
+	try:
+		setting = open('setting.yaml')
+	except:
+		setting = open('../setting.yaml')
 	options = yaml.safe_load(setting)
 
 	# load membership info
@@ -93,7 +95,7 @@ def run_expt(nfeature,initseed,expopt,num_train,loo_flag,model,roi,ds):
 	    data_tmp = pickle.load(fid)
 
 	# load location information for dictionary learning
-	if model in ['all_dict','indv_dict']:
+	if model in ['multi_dict','all_dict','indv_dict']:
 		ws = np.load(options['input_path']+'multi_srm/roi_location.npz')
 		loc = ws[roi]
 		del ws
@@ -112,7 +114,7 @@ def run_expt(nfeature,initseed,expopt,num_train,loo_flag,model,roi,ds):
 
 	# different alignment and prediction data for different datasets
 	accu = []
-	for pd in range(ndata):
+	for pd in range(4):
 		print ('dataset'+str(pd))
 		# separate alignment and prediction data
 		data_align = []
@@ -137,7 +139,7 @@ def run_expt(nfeature,initseed,expopt,num_train,loo_flag,model,roi,ds):
 			# S is the transformed alignment data from training subjects
 			if model in ['multi_srm']:
 				W,S,noise = align.align(data_align,train_mb,niter,nfeature,initseed,model)
-			elif model in ['all_dict','indv_dict']:
+			elif model in ['multi_dict','all_dict','indv_dict']:
 				W_grp,W,S= align.align(data_align,train_mb,niter,nfeature,initseed,model,loc)
 			else:
 				W,S = align.align(data_align,train_mb,niter,nfeature,initseed,model)
@@ -145,9 +147,9 @@ def run_expt(nfeature,initseed,expopt,num_train,loo_flag,model,roi,ds):
 			# W_all = []
 			transformed_pred = []
 			loo = []
-			for d in range(ndata):
+			for d in range(4):
 				if d == pd:
-					if model in ['all_dict','indv_dict']:
+					if model in ['multi_dict','all_dict','indv_dict']:
 						W_tmp,loo_tmp = ut.learn_W(data_align,S,W,train_mb,test_mb,d,model,W_grp)
 					else:
 						W_tmp,loo_tmp = ut.learn_W(data_align,S,W,train_mb,test_mb,d,model)
@@ -168,7 +170,7 @@ def run_expt(nfeature,initseed,expopt,num_train,loo_flag,model,roi,ds):
 		else:
 			# average alignment data of training subjects as transformed alignment data
 			loo = []
-			for d in range(ndata):
+			for d in range(4):
 				if d == pd:
 					_,test_subj = ut.find_train_test_subj(train_mb,test_mb,d)
 					loo.append(test_subj)

@@ -13,29 +13,33 @@ import utils as ut
 import sys, os
 sys.path.insert(0, os.path.abspath('..'))
 
-# nfeature = 25
-# initseed = 0
+
 # roi = 'dmn'
 # # datasets code: greeneye,milky,vodka,sherlock
 # loo_ds = 1 # left-out dataset, can't leave out 0
 # other_ds = [0,2,3] # the merging order of other datasets
 
-def run_expt(nfeature,initseed,roi,loo_ds,other_ds):
+def run_expt(nfeature,initseed,model,roi,loo_ds,other_ds):
+	# model: multi_srm or multi_dict
 	# parameters
 	expt = 'mysseg'
-	model = 'multi_srm'
 	niter = 50
 
 	print (roi)
 	print ('left-out: '+str(loo_ds)+', base: '+str(other_ds[0]))
 
 	# import alignment and experiment method
-	align = importlib.import_module('model.'+model)
+	if model in ['multi_srm']:
+		align = importlib.import_module('model.srm')
+	elif model in ['multi_dict']:
+		align = importlib.import_module('model.dictlearn')
 	pred = importlib.import_module('experiment.'+expt)
 
 	# load path
-	# setting = open('setting.yaml')
-	setting = open('../setting.yaml')
+	try:
+		setting = open('setting.yaml')
+	except:
+		setting = open('../setting.yaml')
 	options = yaml.safe_load(setting)
 
 	# load membership info
