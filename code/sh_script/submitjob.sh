@@ -7,14 +7,14 @@ chmod +x $exp
 
 script='run_exp.sh'
 
-# mysseg
-for rand in 0 2 6 7 8
-do
-	for model in 'all_srm'
-	do
-		sbatch $script 'mysseg' $model $rand
-	done
-done
+# # mysseg
+# for rand in 0 2 6 7 8
+# do
+# 	for model in 'all_srm'
+# 	do
+# 		sbatch $script 'mysseg' $model $rand
+# 	done
+# done
 
 # # mysseg_all
 # for rand in 0 2 6 7 8
@@ -25,23 +25,23 @@ done
 # 	done
 # done
 
-# mapping
-for rand in 0 2 6 7 8
-do
-	for model in 'all_srm'
-	do
-		sbatch $script 'mapping' $model $rand
-	done
-done
+# # mapping
+# for rand in 0 2 6 7 8
+# do
+# 	for model in 'all_srm'
+# 	do
+# 		sbatch $script 'mapping' $model $rand
+# 	done
+# done
 
-# imgpred
-for rand in 0 1 2 3 4 
-do
-	for model in 'all_srm'
-	do
-		sbatch $script 'imgpred' $model $rand
-	done
-done
+# # imgpred
+# for rand in 0 1 2 3 4 
+# do
+# 	for model in 'all_srm'
+# 	do
+# 		sbatch $script 'imgpred' $model $rand
+# 	done
+# done
 
 # # mapping_all
 # for rand in 0 1 3 5 6
@@ -107,4 +107,17 @@ done
 # 		done
 # 	done
 # done
+
+
+# different_TR
+for rand in 0 2 6 7 8
+do 
+	for model in 'multi_srm'
+	do
+		for portion in 0.2 0.4 0.6 0.8
+		do
+			sbatch $script 'different_TR' $model $rand $portion
+		done
+	done
+done
 

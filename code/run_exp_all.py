@@ -15,6 +15,7 @@ parser = argparse.ArgumentParser(usage=usage)
 parser.add_argument("expt",    help="which experiment to run")
 parser.add_argument("model",   help="which model to use, can be 'all_xxx' or 'indv_xxx' or 'multi_srm' ")  
 parser.add_argument("rand",   type=int, help="random seed to use")
+parser.add_argument("-p","--portion",   type=float, help="portion of secondary sets to use")
 parser.add_argument("-s","--shared",   type=int, help="number of shared subjects")
 parser.add_argument("-d","--ds", type = lambda s: [int(item) for item in s.split(',')], help="ds in a list format (e.g.: '1,2,3')")
 args = parser.parse_args()
@@ -154,3 +155,12 @@ elif args.expt in ['dist_subj']:
 				print (sys.exc_info()[0])
 				continue
 
+elif args.expt in ['different_TR']:
+	feat_dict = {'multi_srm':[75,75,100]}
+	for roi,nfeat in zip(['dmn','pt','eac'],feat_dict[args.model]):
+		for expopt in expopt_all:
+			try:
+				run.run_expt(nfeat,args.rand,expopt,num_train,loo_flag,args.model,roi,ds,args.portion)
+			except:
+				print (sys.exc_info()[0])
+				continue
